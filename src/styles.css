@@ -1,0 +1,149 @@
+/*
+ * react-pong. Import once: import 'react-pong/styles.css'.
+ *
+ * Theme it by setting these custom properties on the root, through <Pong>'s
+ * className. The defaults are the original's values, and :where() keeps them
+ * at zero specificity so any class of yours wins.
+ */
+:where(.pong) {
+  --pong-color: #007ee5;
+  /* The ball and each paddle follow --pong-color unless given their own. */
+  --pong-ball-color: var(--pong-color);
+  --pong-paddle-left-color: var(--pong-color);
+  --pong-paddle-right-color: var(--pong-color);
+  --pong-muted: #ccc;
+  --pong-message-color: color-mix(in srgb, var(--pong-color) 50%, transparent);
+  --pong-focus-color: var(--pong-muted);
+  --pong-font: inherit;
+  --pong-font-weight: 100;
+  --pong-font-weight-bold: 700;
+  --pong-ball-size: 15px;
+  --pong-paddle-width: 15px;
+  /* A length, or a percentage of the court height. */
+  --pong-paddle-height: 15%;
+  --pong-score-size: 50px;
+  --pong-message-size: 30px;
+  --pong-hint-size: 12px;
+}
+
+/* Fills its parent. The court is stacked over the score and message, so the
+   ball passes in front of them and a click anywhere focuses the court. */
+.pong {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  isolation: isolate;
+  font-family: var(--pong-font);
+  font-weight: var(--pong-font-weight);
+}
+
+.pong-court {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  outline: none;
+}
+
+.pong-court:focus-visible {
+  outline: 2px solid var(--pong-focus-color);
+  outline-offset: -2px;
+}
+
+/* The engine moves the ball and paddles with inline transforms. Until it
+   starts, the ball waits off the court and the paddles rest at mid-height. */
+.pong-ball {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--pong-ball-size);
+  height: var(--pong-ball-size);
+  background-color: var(--pong-ball-color);
+  transform: translateX(-200%);
+  will-change: transform;
+}
+
+.pong-paddle {
+  position: absolute;
+  top: calc(50% - var(--pong-paddle-height) / 2);
+  width: var(--pong-paddle-width);
+  height: var(--pong-paddle-height);
+  will-change: transform;
+}
+
+.pong-paddle-left {
+  left: 0;
+  background-color: var(--pong-paddle-left-color);
+}
+
+.pong-paddle-right {
+  right: 0;
+  background-color: var(--pong-paddle-right-color);
+}
+
+/* Sized in em, so --pong-score-size scales the whole score. */
+.pong-score {
+  position: absolute;
+  bottom: 0.2em;
+  left: 50%;
+  display: flex;
+  gap: 0.2em;
+  align-items: flex-start;
+  height: 1em;
+  font-size: var(--pong-score-size);
+  line-height: 1;
+  color: var(--pong-muted);
+  transform: translateX(-50%);
+}
+
+.pong-score-side {
+  width: 1.2em;
+  text-align: center;
+  transition: color 0.3s, transform 0.3s;
+}
+
+.pong-score-divider {
+  font-size: 0.44em;
+  font-weight: var(--pong-font-weight-bold);
+  line-height: 1.95;
+}
+
+.pong-score-winner {
+  color: var(--pong-color);
+  transform: scale(1.5);
+}
+
+/* One line where it fits, wrapped where the court is narrow. */
+.pong-message {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: max-content;
+  max-width: 90%;
+  margin: 0;
+  font-size: var(--pong-message-size);
+  color: var(--pong-message-color);
+  text-align: center;
+  transition: opacity 1s;
+  transform: translate(-50%, -50%);
+}
+
+.pong-message-hidden {
+  opacity: 0;
+}
+
+.pong-hint {
+  display: block;
+  font-size: var(--pong-hint-size);
+  color: var(--pong-muted);
+  text-align: right;
+  text-transform: uppercase;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pong-score-side,
+  .pong-message {
+    transition: none;
+  }
+}

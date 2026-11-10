@@ -1,0 +1,99 @@
+@use '../../styles/tokens' as *;
+
+.scene {
+  display: flex;
+  height: 100%;
+
+  @media (max-width: 640px) {
+    flex-direction: column;
+  }
+}
+
+// The game fills whatever the panel leaves.
+.stage {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.game {
+  font-family: $font-game;
+}
+
+.panel {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: $space-m;
+  width: $panel-width;
+  padding: $space-m;
+  overflow-y: auto;
+  background: $color-panel;
+  border-left: 1px solid $color-panel-border;
+
+  @media (max-width: 640px) {
+    width: auto;
+    max-height: 50%;
+    border-top: 1px solid $color-panel-border;
+    border-left: none;
+  }
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $space-s;
+}
+
+.title {
+  margin: 0;
+  font-size: $font-size-l;
+}
+
+.help {
+  margin: 0;
+  font-size: $font-size-s;
+  color: $color-text-muted;
+}
+
+.button {
+  flex: none;
+  padding: $space-xs $space-s;
+  font: inherit;
+  font-size: $font-size-s;
+  color: $color-text;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid $color-panel-border;
+  border-radius: $radius-s;
+  transition: border-color $transition-default;
+
+  &:hover {
+    border-color: $color-accent;
+  }
+}
+
+// Above the court, which is stacked over everything else in the game.
+.show {
+  position: absolute;
+  top: $space-m;
+  left: 50%;
+  z-index: 2;
+  transform: translateX(-50%);
+}
+
+// flex: none, because overflow-x drops a flex item's min-height to 0, so a
+// scrolling panel would otherwise squeeze the snippet instead of scrolling.
+.snippet {
+  flex: none;
+  margin: 0;
+  padding: $space-s;
+  overflow-x: auto;
+  font-family: $font-mono;
+  font-size: $font-size-s;
+  color: $color-text-muted;
+  border: 1px solid $color-panel-border;
+  border-radius: $radius-s;
+}

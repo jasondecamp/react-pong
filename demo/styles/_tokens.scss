@@ -1,0 +1,39 @@
+// Variables only: @use never emits CSS.
+
+$space-xs: 4px;
+$space-s: 8px;
+$space-m: 16px;
+$space-l: 24px;
+
+$radius: 8px;
+$radius-s: 4px;
+$transition-default: 0.2s;
+
+// The court is set in Roboto, as the original's page was. The panel uses the
+// system font so it reads as tooling, not as part of the game.
+$font-game: 'Roboto', sans-serif;
+$font-body: system-ui, -apple-system, 'Segoe UI', sans-serif;
+$font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
+$font-size-s: 12px;
+$font-size-m: 14px;
+$font-size-l: 16px;
+
+$color-page: #fff;
+$color-panel: #f6f7f9;
+$color-panel-border: #dfe3ea;
+$color-text: #2a3140;
+$color-text-muted: #6b7485;
+$color-accent: #007ee5;
+$color-on-accent: #fff;
+$color-knob: #fff;
+$color-track: rgba(0, 0, 0, 0.14);
+$color-focus-ring: rgba(0, 126, 229, 0.35);
+
+$panel-width: 320px;
+
+$thumb-size: 16px;
+$track-height: 4px;
+$switch-width: 32px;
+$switch-height: 18px;
+$inline-label-width: 88px;
+$swatch-size: 24px;

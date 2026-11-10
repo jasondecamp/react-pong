@@ -10,8 +10,6 @@ Conventions are ported from Jason's react-snow (which adapted fourfightingfoxes 
 
 ## Commands
 
-The toolchain lands with 0.1.0.
-
 ```bash
 pnpm install          # Node 24, pnpm 12
 pnpm dev              # demo playground (Vite) at http://localhost:5318, imports from src/
@@ -32,7 +30,7 @@ pnpm test             # Vitest
   - **Sound** synthesizes the blips with Web Audio. No audio files.
   - **`createPong(elements, options)`** wires them together with `requestAnimationFrame`, `ResizeObserver`, `IntersectionObserver`, and key, focus, and visibility listeners. It writes the ball and paddle transforms directly and never inserts DOM. Every resource it acquires is released by `destroy()`.
 - **`src/react/`** contains `<Pong>` and its subcomponents and `usePongGame`, exported as `react-pong`. It may import from core, but core never imports from React.
-  - `<Pong>` creates the engine in an effect, provides it through context, and diffs its options key by key into `update()`. Game state reaches React through `subscribe`/`getState` with `useSyncExternalStore`, which changes only on score, phase, or message changes. **Per-frame positions never go through React state.**
+  - `<Pong>` provides a store (`pongStore.ts`) through context. The store creates the engine in an effect, once `Pong.Court` has handed over its elements, and diffs the options key by key into `update()`. Game state reaches React through `subscribe`/`getState` with `useSyncExternalStore`, which changes only on score, phase, or message changes. **Per-frame positions never go through React state.**
 - **Embedding rules are part of the API:** keyboard input only while the court has focus, handled keys `preventDefault`, everything else passes through; no listeners on `document` or `window` except visibility; any number of instances.
 
 ### Distribution
@@ -48,7 +46,7 @@ pnpm test             # Vitest
 ```
 src/
   core/                       # simulation, ai, sound, createPong, options, types, index.ts
-  react/                      # Pong.tsx, Court.tsx, Score.tsx, Message.tsx, usePongGame.ts, index.ts
+  react/                      # Pong.tsx, Court.tsx, Score.tsx, Message.tsx, usePongGame.ts, pongStore.ts, index.ts
   styles.css                  # the package stylesheet, --pong-* custom properties
   test/                       # test helpers (seeded random, browser stubs); not built
 demo/                         # Vite playground, not published; imports 'react-pong' aliased to src/
