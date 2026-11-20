@@ -40,6 +40,7 @@ describe('Pong', () => {
     expect(court).toHaveAttribute('tabindex', '0');
     expect(container.querySelector('.pong-ball')).toHaveAttribute('aria-hidden', 'true');
     expect(container.querySelectorAll('.pong-paddle[aria-hidden="true"]')).toHaveLength(2);
+    expect(container.querySelectorAll('.pong-ripple[aria-hidden="true"]')).toHaveLength(2);
     expect(container.querySelector('.pong-score')).toHaveTextContent('0:0');
     expect(screen.getByText('Shall we play a game?')).toBeVisible();
     expect(screen.getByText('press enter to start')).toHaveClass('pong-hint');

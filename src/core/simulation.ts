@@ -1,5 +1,6 @@
 import { aiDestination, aiDirection, aiProfiles, aiShot, aiTarget } from './ai.js';
 import type { AiShot } from './ai.js';
+import { maxHold, paddleRate } from './paddle.js';
 import type { PongDifficulty, PongPhase, PongScores, Side } from './types.js';
 
 /** Up (`-1`), still (`0`), or down (`1`). */
@@ -45,6 +46,8 @@ export type SimulationState = {
   ball: Ball;
   left: Paddle;
   right: Paddle;
+  /** Where the ball last touched a paddle, and whose. */
+  contact: { side: Side; x: number; y: number };
   scores: PongScores;
   phase: PongPhase;
   /** The side that serves next; `null` picks one at random. */
@@ -95,16 +98,15 @@ const serveSpeedVariation = 0.1;
 const maxServeAngle = 30 * degrees;
 // Each paddle hit returns the ball 5% faster.
 const hitSpeedUp = 1.05;
-// A paddle held in one direction gains its starting speed again every second,
-// for two seconds.
-const maxHold = 2;
 // A moving paddle drags the ball with it: this fraction of the paddle's own
 // vertical velocity is added to the ball's before its new path is worked out.
 const paddleGrip = 0.5;
 // A ball that catches a paddle within one ball size of its top or bottom edge
-// has hit the corner, and leaves steeply toward the ceiling or the floor.
+// has hit the corner, and leaves steeply toward the ceiling or the floor. One
+// that has got past the paddle's face and is caught by its end leaves at the
+// steepest angle there is.
 const edgeAngle = 70 * degrees;
-// Each hit also nudges the path at random, by up to this much either way.
+// Each hit on a paddle's face also nudges the path at random, by up to this much either way.
 const hitJitter = 3 * degrees;
 // The path never gets steeper than this, so the ball always makes headway
 // across the court.
@@ -130,6 +132,7 @@ export const createSimulation = (random: () => number): Simulation => {
     ball: { x: 0, y: 0, speed: 0, heading: 1, angle: 0 },
     left: { y: 0, direction: 0, held: 0, target: null, shot: 'center' },
     right: { y: 0, direction: 0, held: 0, target: null, shot: 'center' },
+    contact: { side: 'left', x: 0, y: 0 },
     scores: { left: 0, right: 0 },
     phase: 'start',
     server: null,
@@ -165,7 +168,8 @@ export const createSimulation = (random: () => number): Simulation => {
     if (paddle.direction === 1 ? paddle.y >= maxY : paddle.y <= 0) return;
     paddle.held = Math.min(paddle.held + dt, maxHold);
     const from = paddle.y;
-    paddle.y = clamp(from + paddle.direction * state.paddleSpeed * state.height * (1 + paddle.held) * dt, 0, maxY);
+    const speed = state.paddleSpeed * state.height * paddleRate(paddle.held);
+    paddle.y = clamp(from + paddle.direction * speed * dt, 0, maxY);
     if (stopAt != null && (stopAt - from) * (stopAt - paddle.y) <= 0) paddle.y = stopAt;
   };
 
@@ -188,9 +192,27 @@ export const createSimulation = (random: () => number): Simulation => {
     }
   };
 
+  /** The paddle on `side` sends the ball back along a path slanted by `angle`. */
+  const deflect = (side: Side, angle: number) => {
+    const { ball, contact } = state;
+    // The middle of the ball's side that faces the paddle.
+    contact.side = side;
+    contact.x = side === 'left' ? ball.x : ball.x + state.ballWidth;
+    contact.y = ball.y + state.ballHeight / 2;
+    ball.heading = side === 'left' ? 1 : -1;
+    ball.angle = clamp(angle, -maxAngle, maxAngle);
+    ball.speed *= hitSpeedUp;
+    // Having sent the ball away, the AI decides at once where to wait for it.
+    // With the ball on its way back, it decides how to return it.
+    if (side === 'left') state.left.target = aiTarget(state, 'left', ai, random);
+    else state.left.shot = aiShot(ai, random);
+    events.push('paddle');
+  };
+
   /**
-   * The ball meets the paddle on `side`, whose top edge is at `paddleY` and
-   * which is moving at `paddleVelocity` px per second (down is positive).
+   * The ball meets the face of the paddle on `side`, whose top edge is at
+   * `paddleY` and which is moving at `paddleVelocity` px per second (down is
+   * positive).
    */
   const hit = (side: Side, paddleY: number, paddleVelocity: number) => {
     const { ball } = state;
@@ -209,15 +231,22 @@ export const createSimulation = (random: () => number): Simulation => {
       const down = ball.speed * Math.sin(ball.angle) + paddleVelocity * paddleGrip;
       angle = Math.atan2(down, across);
     }
-    const jitter = (random() * 2 - 1) * hitJitter;
-    ball.heading = side === 'left' ? 1 : -1;
-    ball.angle = clamp(angle + jitter, -maxAngle, maxAngle);
-    ball.speed *= hitSpeedUp;
-    // Having sent the ball away, the AI decides at once where to wait for it.
-    // With the ball on its way back, it decides how to return it.
-    if (side === 'left') state.left.target = aiTarget(state, 'left', ai, random);
-    else state.left.shot = aiShot(ai, random);
-    events.push('paddle');
+    deflect(side, angle + (random() * 2 - 1) * hitJitter);
+  };
+
+  /**
+   * For a ball that has got past the face of a paddle: how far through a
+   * stretch of its path, from 0 to 1, the end of the paddle catches it, or
+   * `-1` if it doesn't. `from` and `to` are the ball's top edge measured from
+   * the paddle's, at the start and the end of the stretch. The paddle may
+   * have run into the ball or the ball into the paddle.
+   */
+  const caughtAt = (from: number, to: number) => {
+    const above = -state.ballHeight;
+    const below = state.paddleHeight;
+    if (Math.max(from, to) <= above || Math.min(from, to) >= below) return -1;
+    if (from > above && from < below) return 0;
+    return ((from <= above ? above : below) - from) / (to - from);
   };
 
   // Swept: the ball travels to whichever comes first of a wall, the face of
@@ -247,6 +276,8 @@ export const createSimulation = (random: () => number): Simulation => {
       const edge = heading === 'left' ? 0 : state.width - state.ballWidth;
       const target = missed ? edge : face;
       let reached = false;
+      const fromX = ball.x;
+      const fromY = ball.y;
       if (vx !== 0) {
         const targetTime = (target - ball.x) / vx;
         if (targetTime <= time) {
@@ -258,7 +289,26 @@ export const createSimulation = (random: () => number): Simulation => {
       ball.x += vx * time;
       ball.y = clamp(ball.y + vy * time, 0, maxY);
       remaining -= time;
-      if (wall) {
+      const paddle = state[heading];
+      const before = heading === 'left' ? leftBefore : rightBefore;
+      // Where the paddle's top edge was when this stretch began, and where it is at its end.
+      const paddleFrom = before + (paddle.y - before) * ((dt - remaining - time) / dt);
+      const paddleTo = before + (paddle.y - before) * ((dt - remaining) / dt);
+      const caught = missed ? caughtAt(fromY - paddleFrom, ball.y - paddleTo) : -1;
+      if (caught >= 0) {
+        // Behind the face, the top or bottom end of the paddle has met the
+        // ball, which goes back from where they touched as steeply as it can.
+        ball.x = fromX + vx * time * caught;
+        ball.y = clamp(fromY + vy * time * caught, 0, maxY);
+        remaining += time * (1 - caught);
+        missed = false;
+        const paddleY = paddleFrom + (paddleTo - paddleFrom) * caught;
+        const top = ball.y + state.ballHeight / 2 < paddleY + state.paddleHeight / 2;
+        deflect(heading, top ? -maxAngle : maxAngle);
+        // They touched at the ball's bottom or top, not its side.
+        state.contact.x = ball.x + state.ballWidth / 2;
+        state.contact.y = top ? ball.y + state.ballHeight : ball.y;
+      } else if (wall) {
         ball.angle = -ball.angle;
         events.push('wall');
       } else if (reached) {
@@ -266,10 +316,7 @@ export const createSimulation = (random: () => number): Simulation => {
         if (missed) {
           point(heading === 'left' ? 'right' : 'left');
         } else {
-          const progress = (dt - remaining) / dt;
-          const paddle = state[heading];
-          const before = heading === 'left' ? leftBefore : rightBefore;
-          hit(heading, before + (paddle.y - before) * progress, (paddle.y - before) / dt);
+          hit(heading, paddleTo, (paddle.y - before) / dt);
         }
       }
     }

@@ -76,13 +76,19 @@ export type PongOptions = {
   /** Play the wall, paddle, and point blips (Web Audio, starting with the first key press). Default `true`. */
   sound?: boolean;
   /**
+   * Send rings rippling out from the spot where the ball meets a paddle. Needs the ripple elements; off under
+   * `prefers-reduced-motion`. Default `true`.
+   */
+  ripple?: boolean;
+  /**
    * The keys the court handles, as `KeyboardEvent.key` values mapped to actions. Replaces the whole map, and
    * several keys may share an action. Default `{ ArrowUp: 'up', ArrowDown: 'down', Enter: 'serve', Escape: 'pause' }`.
    */
   keys?: PongKeys;
   /**
-   * Starting paddle speed, in court heights per second, at least 0. A paddle held in one direction speeds up
-   * steadily to three times this over two seconds. Default `1.2`.
+   * Starting paddle speed, in court heights per second, at least 0. A paddle eases in to this speed over its
+   * first 0.08 seconds, and one held in one direction goes on speeding up to three times this over two seconds.
+   * Default `1.2`.
    */
   paddleSpeed?: number;
   /** Called after every point, including the last. */
@@ -105,6 +111,12 @@ export type PongElements = {
   ball: HTMLElement;
   leftPaddle: HTMLElement;
   rightPaddle: HTMLElement;
+  /**
+   * Optional. One per paddle, at the court's top-left corner like the ball: the engine moves it to where the
+   * ball met that paddle and restarts its animation by re-adding the class `pong-ripple-active`.
+   */
+  leftRipple?: HTMLElement | null;
+  rightRipple?: HTMLElement | null;
 };
 
 export type PongInstance = {

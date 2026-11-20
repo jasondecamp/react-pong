@@ -1,3 +1,4 @@
+import { paddleTravel } from './paddle.js';
 import type { Direction, SimulationState } from './simulation.js';
 import type { PongDifficulty, Side } from './types.js';
 
@@ -48,7 +49,7 @@ const character = {
   wanderChance: 0.06,
   cornerChance: 0.15,
   swingChance: 0.5,
-  swingLead: 0.1,
+  swingLead: 0.2,
 };
 
 // The difficulties differ in how early the paddle starts to react to a ball
@@ -94,7 +95,8 @@ const timeToReach = (state: SimulationState, side: Side) => {
  * shot, with the ball `time` seconds away. It lines up the part of the paddle
  * the shot calls for with where the ball will be a moment from now (when it
  * arrives, once that is within the swing lead). For a swing it also hangs
- * back by the distance it will cover on the way in.
+ * back by the distance it has yet to cover on the way in, picking up speed
+ * from a standstill.
  */
 const shotPosition = (state: SimulationState, side: Side, profile: AiProfile, time: number) => {
   const { ball } = state;
@@ -104,7 +106,8 @@ const shotPosition = (state: SimulationState, side: Side, profile: AiProfile, ti
   let contact = state.paddleHeight / 2;
   if (shot === 'top') contact = state.ballHeight / 4;
   else if (shot === 'bottom') contact = state.paddleHeight - state.ballHeight / 4;
-  const runUp = swingOf(shot) * state.paddleSpeed * state.height * lead;
+  const remaining = paddleTravel(profile.swingLead) - paddleTravel(profile.swingLead - lead);
+  const runUp = swingOf(shot) * state.paddleSpeed * state.height * remaining;
   const maxPaddleY = Math.max(0, state.height - state.paddleHeight);
   return Math.min(maxPaddleY, Math.max(0, ballY + state.ballHeight / 2 - contact - runUp));
 };

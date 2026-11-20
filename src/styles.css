@@ -11,6 +11,9 @@
   --pong-ball-color: var(--pong-color);
   --pong-paddle-left-color: var(--pong-color);
   --pong-paddle-right-color: var(--pong-color);
+  /* The rings where the ball meets a paddle follow that paddle's color. */
+  --pong-ripple-left-color: var(--pong-paddle-left-color);
+  --pong-ripple-right-color: var(--pong-paddle-right-color);
   --pong-muted: #ccc;
   --pong-message-color: color-mix(in srgb, var(--pong-color) 50%, transparent);
   --pong-focus-color: var(--pong-muted);
@@ -21,6 +24,10 @@
   --pong-paddle-width: 15px;
   /* A length, or a percentage of the court height. */
   --pong-paddle-height: 15%;
+  /* How wide the rings grow, how thick they are, and how long each takes. */
+  --pong-ripple-size: 240px;
+  --pong-ripple-width: 2px;
+  --pong-ripple-duration: 0.6s;
   --pong-score-size: 50px;
   --pong-message-size: 30px;
   --pong-hint-size: 12px;
@@ -80,6 +87,60 @@
 .pong-paddle-right {
   right: 0;
   background-color: var(--pong-paddle-right-color);
+}
+
+/* A point with no size, which the engine moves to where the ball met a
+   paddle. Its two rings are centered on it, and grow and fade each time the
+   engine adds .pong-ripple-active. */
+.pong-ripple {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+.pong-ripple-left {
+  color: var(--pong-ripple-left-color);
+}
+
+.pong-ripple-right {
+  color: var(--pong-ripple-right-color);
+}
+
+.pong-ripple::before,
+.pong-ripple::after {
+  position: absolute;
+  top: calc(var(--pong-ripple-size) / -2);
+  left: calc(var(--pong-ripple-size) / -2);
+  box-sizing: border-box;
+  width: var(--pong-ripple-size);
+  height: var(--pong-ripple-size);
+  content: '';
+  border: var(--pong-ripple-width) solid currentcolor;
+  border-radius: 50%;
+  opacity: 0;
+}
+
+.pong-ripple-active::before,
+.pong-ripple-active::after {
+  animation: pong-ripple var(--pong-ripple-duration) ease-out backwards;
+}
+
+/* The second ring sets off a little after the first. */
+.pong-ripple-active::after {
+  animation-delay: calc(var(--pong-ripple-duration) / 4);
+}
+
+@keyframes pong-ripple {
+  from {
+    opacity: 0.7;
+    transform: scale(0.1);
+  }
+
+  to {
+    opacity: 0;
+    transform: scale(1);
+  }
 }
 
 /* Sized in em, so --pong-score-size scales the whole score. */
@@ -145,5 +206,9 @@
   .pong-score-side,
   .pong-message {
     transition: none;
+  }
+
+  .pong-ripple {
+    display: none;
   }
 }

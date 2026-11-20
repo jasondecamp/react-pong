@@ -9,7 +9,8 @@ Play it in the [playground](https://jasondecamp.github.io/react-pong/).
 - You play the right paddle against an AI on the left, at three difficulties. First to 11 wins, and whoever scores serves next.
 - A good guest on the host page: keys are heard only while the court has focus, nothing is global, any number of games can share a page, and unmounting releases everything.
 - Delta-time physics: the same speed at 60Hz and 120Hz, and a fast ball can't tunnel through a paddle.
-- A ball with a speed and an angle: serves leave at a steady pace, each paddle hit adds 5%, a moving paddle drags the ball its own way, and the corners of a paddle send it off steeply.
+- A ball with a speed and an angle: serves leave at a steady pace, each paddle hit adds 5%, a moving paddle drags the ball its own way, and the corners of a paddle send it off steeply, even when the paddle catches the ball with its end after the ball has slipped past its face.
+- Rings ripple out from the spot where the ball meets a paddle, in plain CSS.
 - 8-bit blips synthesized with Web Audio. No asset files.
 - The loop idles whenever nothing moves: between points, paused, game over, or offscreen.
 
@@ -110,6 +111,8 @@ const pong = createPong({
   ball: document.querySelector('.pong-ball'),
   leftPaddle: document.querySelector('.pong-paddle-left'),
   rightPaddle: document.querySelector('.pong-paddle-right'),
+  leftRipple: document.querySelector('.pong-ripple-left'),
+  rightRipple: document.querySelector('.pong-ripple-right'),
 }, { smack: true });
 
 pong.subscribe(() => console.log(pong.getState().scores));
@@ -120,12 +123,16 @@ pong.subscribe(() => console.log(pong.getState().scores));
 ```html
 <div class="pong">
   <div class="pong-court" tabindex="0" role="application" aria-label="Pong court">
+    <div class="pong-ripple pong-ripple-left" aria-hidden="true"></div>
+    <div class="pong-ripple pong-ripple-right" aria-hidden="true"></div>
     <div class="pong-ball" aria-hidden="true"></div>
     <div class="pong-paddle pong-paddle-left" aria-hidden="true"></div>
     <div class="pong-paddle pong-paddle-right" aria-hidden="true"></div>
   </div>
 </div>
 ```
+
+The two ripple elements are optional: leave them out and the game plays without the rings.
 
 The score and message are yours to render from `getState()`.
 
@@ -147,8 +154,9 @@ The score and message are yours to render from `getState()`.
 | `difficulty` | `'normal'` | How early the AI reacts to a ball coming at it, and where it waits after sending the ball away. `'easy'`: the third of the court nearest its paddle; waits level with where its shot will reach you. `'normal'`: its own half; waits somewhere at random. `'hard'`: the two thirds nearest its paddle; waits where a plain return will come back to. At every level it often swings through the ball to bend its path, and now and then goes for a corner. |
 | `smack` | `false` | Smack talk after about half the points. No line is repeated within a match. |
 | `sound` | `true` | The wall, paddle, and point blips. Browsers allow audio only after a key press, so the first one starts it. |
+| `ripple` | `true` | Rings that ripple out from the spot where the ball meets a paddle. Off under `prefers-reduced-motion`. |
 | `keys` | arrows, Enter, Esc | `KeyboardEvent.key` values mapped to `'up'`, `'down'`, `'serve'`, or `'pause'`. Replaces the whole map: `{ w: 'up', s: 'down', Enter: 'serve', Escape: 'pause' }`. |
-| `paddleSpeed` | `1.2` | Starting paddle speed, in court heights per second, so it feels the same on any court. A held paddle speeds up to three times this over two seconds, and the faster it is moving when it meets the ball, the more it bends the ball's path. |
+| `paddleSpeed` | `1.2` | Starting paddle speed, in court heights per second, so it feels the same on any court. A paddle eases in to this speed over its first 0.08s rather than jumping to it, and a held one goes on speeding up to three times this over two seconds, and the faster it is moving when it meets the ball, the more it bends the ball's path. |
 | `onPoint` | | Called with `{ scorer, scores }` after every point. |
 | `onGameOver` | | Called with `{ winner, scores }` when a side wins. |
 
@@ -168,6 +176,8 @@ Every color and size is a custom property with the original's value as its defau
 | --- | --- | --- |
 | `--pong-color` | `#007ee5` | Ball, paddles, and the winning score. |
 | `--pong-ball-color`, `--pong-paddle-left-color`, `--pong-paddle-right-color` | `--pong-color` | The ball and each paddle on their own. |
+| `--pong-ripple-left-color`, `--pong-ripple-right-color` | that paddle's color | The rings where the ball meets each paddle. |
+| `--pong-ripple-size`, `--pong-ripple-width`, `--pong-ripple-duration` | `240px`, `2px`, `0.6s` | How wide the rings grow, how thick they are, and how long each takes. |
 | `--pong-muted` | `#ccc` | Score and hint text. |
 | `--pong-message-color` | `--pong-color` at 50% | Message text. |
 | `--pong-focus-color` | `--pong-muted` | The court's keyboard focus outline. |

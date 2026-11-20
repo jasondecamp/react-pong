@@ -13,6 +13,8 @@ export type Theme = {
   ballSize: number;
   paddleWidth: number;
   paddleHeight: number;
+  rippleSize: number;
+  rippleDuration: number;
   scoreSize: number;
   messageSize: number;
 };
@@ -26,6 +28,8 @@ export const defaultTheme: Theme = {
   ballSize: 15,
   paddleWidth: 15,
   paddleHeight: 15,
+  rippleSize: 240,
+  rippleDuration: 0.6,
   scoreSize: 50,
   messageSize: 30,
 };
@@ -39,6 +43,8 @@ const properties: Record<keyof Theme, { property: string; unit: string }> = {
   ballSize: { property: '--pong-ball-size', unit: 'px' },
   paddleWidth: { property: '--pong-paddle-width', unit: 'px' },
   paddleHeight: { property: '--pong-paddle-height', unit: '%' },
+  rippleSize: { property: '--pong-ripple-size', unit: 'px' },
+  rippleDuration: { property: '--pong-ripple-duration', unit: 's' },
   scoreSize: { property: '--pong-score-size', unit: 'px' },
   messageSize: { property: '--pong-message-size', unit: 'px' },
 };

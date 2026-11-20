@@ -9,7 +9,7 @@ import { Controls } from '../Controls/Controls';
 import type { ControlValue } from '../Controls/ControlsContext';
 import styles from './App.module.scss';
 
-type Options = Required<Pick<PongOptions, 'winningScore' | 'difficulty' | 'smack' | 'sound' | 'keys' | 'paddleSpeed'>>;
+type Options = Required<Pick<PongOptions, 'winningScore' | 'difficulty' | 'smack' | 'sound' | 'ripple' | 'keys' | 'paddleSpeed'>>;
 
 const letterKeys: PongKeys = { w: 'up', s: 'down', Enter: 'serve', Escape: 'pause' };
 
@@ -18,6 +18,7 @@ const initialOptions: Options = {
   difficulty: defaultOptions.difficulty,
   smack: defaultOptions.smack,
   sound: defaultOptions.sound,
+  ripple: defaultOptions.ripple,
   keys: defaultKeys,
   paddleSpeed: defaultOptions.paddleSpeed,
 };
@@ -95,6 +96,7 @@ export const App = () => {
               </Controls.Choice>
               <Controls.Toggle name='smack' label='Smack talk' />
               <Controls.Toggle name='sound' label='Sound' />
+              <Controls.Toggle name='ripple' label='Ripple' />
             </Controls.Group>
           </Controls>
           <Controls values={theme} onChange={setThemeValue}>
@@ -107,6 +109,8 @@ export const App = () => {
               <Controls.Slider name='ballSize' label='Ball size (px)' min={5} max={60} />
               <Controls.Slider name='paddleWidth' label='Paddle width (px)' min={5} max={60} />
               <Controls.Slider name='paddleHeight' label='Paddle height (% of court)' min={5} max={50} />
+              <Controls.Slider name='rippleSize' label='Ripple size (px)' min={20} max={600} />
+              <Controls.Slider name='rippleDuration' label='Ripple duration (s)' min={0.1} max={2} step={0.1} />
               <Controls.Slider name='scoreSize' label='Score size (px)' min={20} max={120} />
               <Controls.Slider name='messageSize' label='Message size (px)' min={12} max={60} />
             </Controls.Group>

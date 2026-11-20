@@ -183,13 +183,13 @@ describe('aiDestination', () => {
   });
 
   it('hangs back for a swing, by the distance it will cover on the way in', () => {
-    // 0.1s at 1.2 court heights per second is 48px.
-    expect(aiDestination(incoming(300, 'down'), 'left', profile)).toBeCloseTo(129.5);
-    expect(aiDestination(incoming(300, 'up'), 'left', profile)).toBeCloseTo(225.5);
+    // Easing in over 0.2s at 1.2 court heights per second covers 80px.
+    expect(aiDestination(incoming(300, 'down'), 'left', profile)).toBeCloseTo(97.5);
+    expect(aiDestination(incoming(300, 'up'), 'left', profile)).toBeCloseTo(257.5);
   });
 
   it('has nowhere to stop once the swing has begun', () => {
-    // 0.05s out, a paddle that hung back is still 24px short of where it will meet the ball.
+    // 0.05s out, a paddle that hung back is still 28px short of where it will meet the ball.
     const state = incoming(40, 'down');
     state.left.y = 150;
     expect(aiDestination(state, 'left', profile)).toBeNull();

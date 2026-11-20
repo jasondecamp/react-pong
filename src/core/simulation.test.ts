@@ -144,6 +144,8 @@ describe('simulation', () => {
       expect(Math.abs(simulation.state.ball.angle)).toBeLessThanOrEqual(3 * degrees);
       expect(simulation.state.ball.x).toBeLessThan(770);
       expect(simulation.state.phase).toBe('rally');
+      // The ball's right side, at mid-height, on the paddle's face.
+      expect(simulation.state.contact).toEqual({ side: 'right', x: 785, y: 197.5 });
     });
 
     it('cannot tunnel through a paddle however fast it goes', () => {
@@ -193,10 +195,10 @@ describe('simulation', () => {
     };
 
     it('is dragged along by a moving paddle, in proportion to the paddle\'s velocity', () => {
-      // About 0.15s in, the paddle moves at some 550px/s; half of that against 500px/s across is near 29 degrees.
-      expect(struck(1).angle).toBeGreaterThan(22 * degrees);
-      expect(struck(1).angle).toBeLessThan(36 * degrees);
-      expect(struck(-1).angle).toBeLessThan(-22 * degrees);
+      // About 0.15s in, the paddle moves at some 500px/s; half of that against 500px/s across is near 27 degrees.
+      expect(struck(1).angle).toBeGreaterThan(20 * degrees);
+      expect(struck(1).angle).toBeLessThan(34 * degrees);
+      expect(struck(-1).angle).toBeLessThan(-20 * degrees);
       expect(Math.abs(struck(0).angle)).toBeLessThanOrEqual(3 * degrees);
       expect(struck(1).speed).toBeCloseTo(525);
     });
@@ -225,26 +227,86 @@ describe('simulation', () => {
       expect(simulation.state.ball.angle).toBeLessThanOrEqual(73 * degrees);
     });
 
+    it('is knocked back steeply by the end of a paddle that runs into it behind the face', () => {
+      const above = court();
+      // Level with the paddle's face and just above its top, with the paddle on its way up.
+      rally(above, 772, 150, 100, 0);
+      above.state.right.direction = -1;
+      above.state.right.held = 1;
+      expect(above.step(1 / 60, -1)).toEqual(['paddle']);
+      expect(above.state.ball.heading).toBe(-1);
+      expect(above.state.ball.angle).toBeCloseTo(-80 * degrees);
+      expect(above.state.ball.speed).toBeCloseTo(105);
+      // The bottom of the ball, on the top end of the paddle.
+      expect(above.state.contact.side).toBe('right');
+      expect(above.state.contact.y).toBeCloseTo(165);
+      expect(above.state.contact.x).toBeGreaterThan(777);
+      expect(above.state.contact.x).toBeLessThan(785);
+      expect(play(above, 1)).not.toContain('point');
+
+      const below = court();
+      rally(below, 772, 235, 100, 0);
+      below.state.right.direction = 1;
+      below.state.right.held = 1;
+      expect(below.step(1 / 60, 1)).toEqual(['paddle']);
+      expect(below.state.ball.heading).toBe(-1);
+      expect(below.state.ball.angle).toBeCloseTo(80 * degrees);
+    });
+
+    it('is caught behind the face however far the paddle moves in one step', () => {
+      const simulation = court();
+      rally(simulation, 772, 100, 100, 0);
+      simulation.step(0.001, 0);
+      // Fast enough to go from below the ball to above it in a single step.
+      simulation.state.right.direction = -1;
+      simulation.state.right.held = 2;
+      simulation.state.paddleSpeed = 5;
+      expect(simulation.step(0.05, -1)).toEqual(['paddle']);
+      expect(simulation.state.right.y).toBe(0);
+      expect(simulation.state.ball.angle).toBeCloseTo(-80 * degrees);
+    });
+
+    it('still gets past a paddle that stays clear of it', () => {
+      const simulation = court();
+      rally(simulation, 772, 150, 100, 0);
+      expect(play(simulation)).toEqual(['point']);
+    });
+
     it('never leaves a paddle steeper than 80 degrees', () => {
       const simulation = court();
       // Already at 78 degrees, and the paddle is moving the same way.
       rally(simulation, 768, 150, 100, 470);
-      simulation.state.right.y = 120;
+      simulation.state.right.y = 115;
+      simulation.state.right.direction = 1;
+      simulation.state.right.held = 1;
       expect(simulation.step(0.03, 1)).toEqual(['paddle']);
       expect(simulation.state.ball.angle).toBeCloseTo(80 * degrees);
     });
   });
 
   describe('paddles', () => {
-    it('move at the paddle speed, in court heights per second, and accelerate while held', () => {
+    it('ease in to the paddle speed, in court heights per second, then keep accelerating while held', () => {
       const simulation = court();
+      // A quarter of a 400px court per second: 100px/s, or 1px per 10ms step.
       simulation.setOptions({ winningScore: 11, difficulty: 'normal', paddleSpeed: 0.25 });
-      simulation.step(0.05, 1);
-      const first = simulation.state.right.y - 170;
-      expect(first).toBeGreaterThan(5);
-      expect(first).toBeLessThan(5.5);
-      simulation.step(0.05, 1);
-      expect(simulation.state.right.y - 170 - first).toBeGreaterThan(first);
+      const moved = () => {
+        const before = simulation.state.right.y;
+        simulation.step(0.01, 1);
+        return simulation.state.right.y - before;
+      };
+      const first = moved();
+      expect(first).toBeGreaterThan(0);
+      expect(first).toBeLessThan(0.1);
+      let last = first;
+      for (let step = 0; step < 7; step++) {
+        const next = moved();
+        expect(next).toBeGreaterThan(last);
+        last = next;
+      }
+      // 0.08s in, it is up to its starting speed and a little more.
+      expect(last).toBeCloseTo(1.08);
+      for (let step = 0; step < 92; step++) last = moved();
+      expect(last).toBeCloseTo(2);
     });
 
     it('cross a court of any size in the same time', () => {

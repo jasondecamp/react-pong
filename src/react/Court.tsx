@@ -20,6 +20,8 @@ export const Court = ({ className, 'aria-label': ariaLabel = 'Pong court', autoF
   const ballRef = useRef<HTMLDivElement>(null);
   const leftPaddleRef = useRef<HTMLDivElement>(null);
   const rightPaddleRef = useRef<HTMLDivElement>(null);
+  const leftRippleRef = useRef<HTMLDivElement>(null);
+  const rightRippleRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const court = courtRef.current;
@@ -27,7 +29,14 @@ export const Court = ({ className, 'aria-label': ariaLabel = 'Pong court', autoF
     const leftPaddle = leftPaddleRef.current;
     const rightPaddle = rightPaddleRef.current;
     if (court == null || ball == null || leftPaddle == null || rightPaddle == null) return undefined;
-    return store.attach({ court, ball, leftPaddle, rightPaddle });
+    return store.attach({
+      court,
+      ball,
+      leftPaddle,
+      rightPaddle,
+      leftRipple: leftRippleRef.current,
+      rightRipple: rightRippleRef.current,
+    });
   }, [store]);
 
   useEffect(() => {
@@ -42,6 +51,8 @@ export const Court = ({ className, 'aria-label': ariaLabel = 'Pong court', autoF
       aria-label={ariaLabel}
       tabIndex={0}
     >
+      <div ref={leftRippleRef} className='pong-ripple pong-ripple-left' aria-hidden />
+      <div ref={rightRippleRef} className='pong-ripple pong-ripple-right' aria-hidden />
       <div ref={ballRef} className='pong-ball' aria-hidden />
       <div ref={leftPaddleRef} className='pong-paddle pong-paddle-left' aria-hidden />
       <div ref={rightPaddleRef} className='pong-paddle pong-paddle-right' aria-hidden />

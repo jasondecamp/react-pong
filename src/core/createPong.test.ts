@@ -363,6 +363,55 @@ describe('createPong', () => {
     });
   });
 
+  describe('ripple', () => {
+    const withRipples = (): PongElements => {
+      const leftRipple = piece('pong-ripple pong-ripple-left');
+      const rightRipple = piece('pong-ripple pong-ripple-right');
+      elements.court.prepend(leftRipple, rightRipple);
+      elements = { ...elements, leftRipple, rightRipple };
+      return elements;
+    };
+
+    /** Play points until a ripple starts, for `points` points at most. */
+    const playUntilRipple = (pong: PongInstance, points: number) => {
+      const rippling = () => elements.court.querySelector<HTMLElement>('.pong-ripple-active');
+      for (let served = 0; served < points && rippling() == null; served++) {
+        press('Enter');
+        for (let frame = 0; frame < 2000 && rippling() == null && pong.getState().phase === 'rally'; frame++) {
+          browser.frame();
+        }
+      }
+      return rippling();
+    };
+
+    it('starts the struck paddle\'s rings where the ball touched it', () => {
+      const { leftRipple, rightRipple } = withRipples();
+      const rippling = playUntilRipple(start({ winningScore: 100 }), 50);
+      expect([leftRipple, rightRipple]).toContain(rippling);
+      // On the face of whichever paddle it was: 15px in from that side of the 800px court.
+      const x = rippling === leftRipple ? 15 : 785;
+      expect(rippling?.style.transform).toMatch(new RegExp(`^translate\\(${x}px, [\\d.]+px\\)$`));
+      expect(elements.court.querySelectorAll('.pong-ripple-active')).toHaveLength(1);
+    });
+
+    it('stays still with ripple off', () => {
+      withRipples();
+      const pong = start({ ripple: false, winningScore: 5 });
+      expect(playUntilRipple(pong, 5)).toBeNull();
+      expect(pong.getState().phase).toBe('gameOver');
+    });
+
+    it('is cleared on destroy', () => {
+      const { leftRipple, rightRipple } = withRipples();
+      const pong = start({ winningScore: 100 });
+      expect(playUntilRipple(pong, 50)).not.toBeNull();
+      pong.destroy();
+      expect(elements.court.querySelector('.pong-ripple-active')).toBeNull();
+      expect(leftRipple?.style.transform).toBe('');
+      expect(rightRipple?.style.transform).toBe('');
+    });
+  });
+
   describe('destroy', () => {
     it('releases the loop, observers, listeners, and audio', () => {
       const pong = start();

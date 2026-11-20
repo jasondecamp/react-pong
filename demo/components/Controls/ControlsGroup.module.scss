@@ -4,6 +4,9 @@
   display: flex;
   flex-direction: column;
   gap: $space-s;
+  // A fieldset is at least as wide as its content by default, which would
+  // push wide rows past the panel instead of letting them shrink.
+  min-width: 0;
   margin: 0;
   padding: $space-s $space-m $space-m;
   border: 1px solid $color-panel-border;

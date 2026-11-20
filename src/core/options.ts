@@ -12,6 +12,7 @@ export const defaultOptions: ResolvedPongOptions = {
   difficulty: 'normal',
   smack: false,
   sound: true,
+  ripple: true,
   keys: defaultKeys,
   paddleSpeed: 1.2,
 };
@@ -51,6 +52,7 @@ export const resolveOptions = (options: PongOptions): ResolvedPongOptions => {
     difficulty: difficulties.includes(merged.difficulty) ? merged.difficulty : defaultOptions.difficulty,
     smack: merged.smack === true,
     sound: merged.sound === true,
+    ripple: merged.ripple === true,
     keys: resolveKeys(merged.keys),
     paddleSpeed: Math.max(0, finiteOr(merged.paddleSpeed, defaultOptions.paddleSpeed)),
   };

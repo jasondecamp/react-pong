@@ -16,13 +16,16 @@ const round = (value: number) => Math.round(value * 100) / 100;
 // With smack talk on, the chance that a point draws a remark.
 const smackChance = 0.5;
 
+// On a ripple element, the class that runs its rings.
+const rippleClass = 'pong-ripple-active';
+
 /**
  * Run a game of Pong on existing elements. The court is measured with a
  * ResizeObserver, so size it with CSS. Keys are heard only while the court has
  * focus. The game opens on the start screen and waits for a serve.
  */
 export const createPong = (elements: PongElements, initialOptions: PongOptions = {}): PongInstance => {
-  const { court, ball, leftPaddle, rightPaddle } = elements;
+  const { court, ball, leftPaddle, rightPaddle, leftRipple, rightRipple } = elements;
   const view = court.ownerDocument.defaultView;
   let rawOptions: PongOptions = { ...initialOptions };
   let options: ResolvedPongOptions = resolveOptions(rawOptions);
@@ -68,6 +71,18 @@ export const createPong = (elements: PongElements, initialOptions: PongOptions =
     rightPaddle.style.transform = `translateY(${round(right.y - rightRest)}px)`;
   };
 
+  /** Move the struck paddle's ripple to where the ball touched it, and start its rings again. */
+  const ripple = () => {
+    const { side, x, y } = simulation.state.contact;
+    const element = side === 'left' ? leftRipple : rightRipple;
+    if (element == null) return;
+    element.style.transform = `translate(${round(x)}px, ${round(y)}px)`;
+    // A CSS animation starts over only once the browser has seen the element without it.
+    element.classList.remove(rippleClass);
+    element.getBoundingClientRect();
+    element.classList.add(rippleClass);
+  };
+
   // The loop runs during a rally, and otherwise only while a paddle key is
   // held: the paddle moves between points too, as in the original.
   const shouldRun = () => {
@@ -85,6 +100,7 @@ export const createPong = (elements: PongElements, initialOptions: PongOptions =
       const event = events[index];
       if (event === 'wall' || event === 'paddle') {
         if (options.sound) sound.play(event);
+        if (event === 'paddle' && options.ripple) ripple();
       } else if (event === 'point') {
         scored();
       }
@@ -283,6 +299,11 @@ export const createPong = (elements: PongElements, initialOptions: PongOptions =
       ball.style.transform = '';
       leftPaddle.style.transform = '';
       rightPaddle.style.transform = '';
+      for (const element of [leftRipple, rightRipple]) {
+        if (element == null) continue;
+        element.style.transform = '';
+        element.classList.remove(rippleClass);
+      }
     },
   };
 };
