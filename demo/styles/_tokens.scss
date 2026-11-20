@@ -19,17 +19,22 @@ $font-size-m: 14px;
 $font-size-l: 16px;
 
 $color-page: #fff;
-$color-panel: #f6f7f9;
-$color-panel-border: #dfe3ea;
-$color-text: #2a3140;
-$color-text-muted: #6b7485;
+$color-wall: #ececec;
+$color-court-border: #ccc;
+// The panel is white so it stands apart from the gray wall beside it.
+$color-panel: #fff;
+$color-panel-border: #b9c0cc;
+$color-text: #1d2330;
+$color-text-muted: #505a6b;
 $color-accent: #007ee5;
 $color-on-accent: #fff;
 $color-knob: #fff;
-$color-track: rgba(0, 0, 0, 0.14);
+$color-track: rgba(0, 0, 0, 0.26);
 $color-focus-ring: rgba(0, 126, 229, 0.35);
 
 $panel-width: 320px;
+$wall-width: 60px;
+$court-border-width: 2px;
 
 $thumb-size: 16px;
 $track-height: 4px;

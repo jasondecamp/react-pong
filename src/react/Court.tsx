@@ -1,6 +1,7 @@
 import classNames from 'classnames';
 import { useContext, useEffect, useRef } from 'react';
 import { PongContext } from './PongContext.js';
+import { usePongGame } from './usePongGame.js';
 
 export type CourtProps = {
   className?: string;
@@ -12,10 +13,12 @@ export type CourtProps = {
 
 /**
  * The playfield: a focusable box holding the ball and both paddles. Keys reach
- * the game only while it has focus; clicking it focuses it.
+ * the game only while it has focus; clicking it focuses it. On the impossible
+ * difficulty the AI's paddle pulses.
  */
 export const Court = ({ className, 'aria-label': ariaLabel = 'Pong court', autoFocus = false }: CourtProps) => {
   const store = useContext(PongContext);
+  const { difficulty } = usePongGame();
   const courtRef = useRef<HTMLDivElement>(null);
   const ballRef = useRef<HTMLDivElement>(null);
   const leftPaddleRef = useRef<HTMLDivElement>(null);
@@ -54,7 +57,11 @@ export const Court = ({ className, 'aria-label': ariaLabel = 'Pong court', autoF
       <div ref={leftRippleRef} className='pong-ripple pong-ripple-left' aria-hidden />
       <div ref={rightRippleRef} className='pong-ripple pong-ripple-right' aria-hidden />
       <div ref={ballRef} className='pong-ball' aria-hidden />
-      <div ref={leftPaddleRef} className='pong-paddle pong-paddle-left' aria-hidden />
+      <div
+        ref={leftPaddleRef}
+        className={classNames('pong-paddle', 'pong-paddle-left', difficulty === 'impossible' && 'pong-paddle-pulsing')}
+        aria-hidden
+      />
       <div ref={rightPaddleRef} className='pong-paddle pong-paddle-right' aria-hidden />
     </div>
   );

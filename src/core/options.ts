@@ -38,7 +38,7 @@ export const initialState: PongState = {
 
 const actions: readonly PongAction[] = ['up', 'down', 'serve', 'pause', 'reset', 'help', 'difficulty'];
 /** Every difficulty, in the order the difficulty key steps through them. */
-export const difficulties: readonly PongDifficulty[] = ['easy', 'normal', 'hard'];
+export const difficulties: readonly PongDifficulty[] = ['easy', 'normal', 'hard', 'impossible'];
 
 const finiteOr = (value: number, fallback: number) => (Number.isFinite(value) ? value : fallback);
 

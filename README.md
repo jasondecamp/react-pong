@@ -6,10 +6,10 @@ Retro Pong you can embed: a framework-free Pong engine, plus a composite React c
 
 Play it in the [playground](https://jasondecamp.github.io/react-pong/).
 
-- You play the right paddle against an AI on the left, at three difficulties. First to 11 wins. A toss decides the first serve, and after that whoever scores serves next.
+- You play the right paddle against an AI on the left, at four difficulties, the last of them with no handicap at all. First to 11 wins. A toss decides the first serve, and after that whoever scores serves next.
 - A good guest on the host page: keys are heard only while the court has focus, nothing is global, any number of games can share a page, and unmounting releases everything.
 - Delta-time physics: the same speed at 60Hz and 120Hz, and a fast ball can't tunnel through a paddle.
-- A ball with a speed and an angle: serves leave at a steady pace, each paddle hit adds 5%, a moving paddle drags the ball its own way, and the corners of a paddle send it off steeply, even when the paddle catches the ball with its end after the ball has slipped past its face.
+- A ball with a speed and an angle: serves leave at a steady pace, each paddle hit adds 5% and takes some of the slant off the ball's path, a moving paddle drags the ball its own way, and the corners of a paddle send it off steeply, even when the paddle catches the ball with its end after the ball has slipped past its face.
 - Rings ripple out from the spot where the ball meets a paddle, in plain CSS.
 - 8-bit blips synthesized with Web Audio. No asset files.
 - The loop idles whenever nothing moves: between points, paused, game over, or offscreen.
@@ -49,7 +49,7 @@ Click the court (or tab to it) to give it the keyboard. Keys the game handles do
 | Space | Pause and resume. |
 | Esc | After game over, reset. |
 | ? | Show the keys, pausing a rally first. ? or Esc closes them, and the rally stays paused until you resume it with Space. |
-| D | Step the difficulty: easy, normal, hard. Between games only: on the start screen and after game over. |
+| D | Step the difficulty: easy, normal, hard, impossible. Between games only: on the start screen and after game over. |
 
 Just above the score, a small hint points to the help. Between games the current difficulty is shown above it, in its own color.
 
@@ -144,7 +144,7 @@ pong.subscribe(() => console.log(pong.getState().scores));
 </div>
 ```
 
-The two ripple elements are optional: leave them out and the game plays without the rings.
+The two ripple elements are optional: leave them out and the game plays without the rings. To pulse the AI's paddle on the impossible difficulty, as `<Pong.Court>` does, add the class `pong-paddle-pulsing` to the left paddle while `getState().difficulty` is `'impossible'`.
 
 The score, message, and help are yours to render from `getState()`: the engine handles the help and difficulty keys and reports `help`, `difficulty`, `winningScore`, and `keys` in the state.
 
@@ -164,7 +164,7 @@ The score, message, and help are yours to render from `getState()`: the engine h
 | Option | Default | |
 | --- | --- | --- |
 | `winningScore` | `11` | Points needed to win. No win-by-two. |
-| `difficulty` | `'normal'` | How early the AI reacts to a ball coming at it, and where it waits after sending the ball away. `'easy'`: the third of the court nearest its paddle; waits level with where its shot will reach you. `'normal'`: its own half; waits somewhere at random. `'hard'`: the two thirds nearest its paddle; waits where a plain return will come back to. The difficulty key steps through them between games. At every level it often swings through the ball to bend its path, and now and then goes for a corner. |
+| `difficulty` | `'normal'` | How early the AI reacts to a ball coming at it, where it waits after sending the ball away, and how well it aims (it is off by up to 17.5% of a paddle on `'easy'`, 10% on `'normal'`, 4% on `'hard'`). `'easy'`: the third of the court nearest its paddle; waits level with where its shot will reach you. `'normal'`: its own half; waits somewhere at random. `'hard'`: the two thirds nearest its paddle; waits where a plain return will come back to. `'impossible'` has no handicap: it decides at every step, never hesitates, aims exactly, and works out where the ball will arrive the moment it is hit and goes straight there; only the speed of its paddle, the same as yours, can beat it, and its paddle glows like a watching eye the whole time, swelling and ebbing. The difficulty key steps through all four between games. At the other three levels it reacts ten times a second, moves under the same paddle speed limits as you, often swings through the ball to bend its path (against a steep ball, to flatten it), and now and then goes for a corner. |
 | `smack` | `true` | Smack talk after about half the points, in the AI paddle's color. No line is repeated within a match. |
 | `sound` | `true` | The wall, paddle, and point blips. Browsers allow audio only after a key press, so the first one starts it. |
 | `ripple` | `true` | Rings that ripple out from the spot where the ball meets a paddle. Off under `prefers-reduced-motion`. |
@@ -192,6 +192,7 @@ Every color and size is a custom property. Set them on the root, through `<Pong>
 | `--pong-color` | `#007ee5` | Your paddle, the winning score, and the base of the message and help colors. |
 | `--pong-ball-color` | `#000` | The ball. |
 | `--pong-paddle-left-color`, `--pong-paddle-right-color` | `#a61c28`, `--pong-color` | The AI's paddle, a dark maroon, and yours. |
+| `--pong-paddle-pulse-color`, `--pong-paddle-pulse-duration` | `#ff2a1a`, `1.4s` | On the impossible difficulty the AI's paddle glows like a watching eye, swelling steadily to this hotter color and back without ever going out. The duration is one way, in or out. Off under `prefers-reduced-motion`. |
 | `--pong-smack-color` | `--pong-paddle-left-color` | Smack talk, which is the AI speaking. |
 | `--pong-ripple-left-color`, `--pong-ripple-right-color` | that paddle's color | The rings where the ball meets each paddle. |
 | `--pong-ripple-size`, `--pong-ripple-width`, `--pong-ripple-duration` | `240px`, `2px`, `0.6s` | How wide the rings grow, how thick they are, and how long each takes. |
@@ -205,7 +206,7 @@ Every color and size is a custom property. Set them on the root, through `<Pong>
 | `--pong-paddle-height` | `15%` | A length, or a percentage of the court height. |
 | `--pong-score-size` | `50px` | |
 | `--pong-message-size`, `--pong-hint-size` | `52px`, `12px` | |
-| `--pong-difficulty-easy-color`, `--pong-difficulty-normal-color`, `--pong-difficulty-hard-color` | `#2a9d5c`, `#d9900a`, `#e0452c` | The difficulty shown above the score between games. |
+| `--pong-difficulty-easy-color`, `--pong-difficulty-normal-color`, `--pong-difficulty-hard-color`, `--pong-difficulty-impossible-color` | `#2a9d5c`, `#d9900a`, `#e0452c`, `#7a2bbf` | The difficulty shown above the score between games. |
 | `--pong-help-background` | `#fff` | What the help covers the court with. Set the background to match a page that isn't white. |
 | `--pong-help-color`, `--pong-help-size`, `--pong-help-font-weight` | `--pong-color` at 80%, `18px`, `400` | The help's text. It is heavier than the game's so that small type stays readable; if you load your own font, load this weight too. |
 

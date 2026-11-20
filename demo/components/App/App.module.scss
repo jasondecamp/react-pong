@@ -9,16 +9,25 @@
   }
 }
 
-// The game fills whatever the panel leaves.
+// The game fills whatever the panel leaves, inside the court's walls: the
+// stage's padding, showing its background.
 .stage {
   position: relative;
   flex: 1;
   min-width: 0;
   min-height: 0;
+  padding: $wall-width;
+  background: $color-wall;
 }
 
 .game {
   font-family: $font-game;
+  background: $color-page;
+  border: $court-border-width solid $color-court-border;
+  // The court owns this page and its border already marks it out, so the
+  // package's focus outline, drawn just inside the court's edge and over the
+  // paddles, is turned off here.
+  --pong-focus-color: transparent;
 }
 
 .panel {
@@ -65,7 +74,8 @@
   font-size: $font-size-s;
   color: $color-text;
   cursor: pointer;
-  background: transparent;
+  // Opaque, so the button stands out on the wall as well as in the panel.
+  background: $color-panel;
   border: 1px solid $color-panel-border;
   border-radius: $radius-s;
   transition: border-color $transition-default;
@@ -75,13 +85,12 @@
   }
 }
 
-// Above the court, which is stacked over everything else in the game.
+// In the middle of the top wall, clear of the court.
 .show {
   position: absolute;
-  top: $space-m;
+  top: calc(#{$wall-width} / 2);
   left: 50%;
-  z-index: 2;
-  transform: translateX(-50%);
+  transform: translate(-50%, -50%);
 }
 
 // flex: none, because overflow-x drops a flex item's min-height to 0, so a

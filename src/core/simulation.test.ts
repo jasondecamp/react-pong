@@ -315,13 +315,13 @@ describe('simulation', () => {
       // Falling toward the paddle, but catching its top corner.
       rally(simulation, 760, 150, 500, 500);
       expect(simulation.step(0.03, 0)).toEqual(['paddle']);
-      expect(simulation.state.ball.angle).toBeLessThanOrEqual(-67 * degrees);
-      expect(simulation.state.ball.angle).toBeGreaterThanOrEqual(-73 * degrees);
+      expect(simulation.state.ball.angle).toBeLessThanOrEqual(-57 * degrees);
+      expect(simulation.state.ball.angle).toBeGreaterThanOrEqual(-63 * degrees);
 
       Object.assign(simulation.state.ball, { x: 760, y: 220, ...path(500, 0) });
       expect(simulation.step(0.03, 0)).toEqual(['paddle']);
-      expect(simulation.state.ball.angle).toBeGreaterThanOrEqual(67 * degrees);
-      expect(simulation.state.ball.angle).toBeLessThanOrEqual(73 * degrees);
+      expect(simulation.state.ball.angle).toBeGreaterThanOrEqual(57 * degrees);
+      expect(simulation.state.ball.angle).toBeLessThanOrEqual(63 * degrees);
     });
 
     it('is knocked back steeply by the end of a paddle that runs into it behind the face', () => {
@@ -332,7 +332,7 @@ describe('simulation', () => {
       above.state.right.held = 1;
       expect(above.step(1 / 60, -1)).toEqual(['paddle']);
       expect(above.state.ball.heading).toBe(-1);
-      expect(above.state.ball.angle).toBeCloseTo(-80 * degrees);
+      expect(above.state.ball.angle).toBeCloseTo(-70 * degrees);
       expect(above.state.ball.speed).toBeCloseTo(105);
       // The bottom of the ball, on the top end of the paddle.
       expect(above.state.contact.side).toBe('right');
@@ -347,7 +347,7 @@ describe('simulation', () => {
       below.state.right.held = 1;
       expect(below.step(1 / 60, 1)).toEqual(['paddle']);
       expect(below.state.ball.heading).toBe(-1);
-      expect(below.state.ball.angle).toBeCloseTo(80 * degrees);
+      expect(below.state.ball.angle).toBeCloseTo(70 * degrees);
     });
 
     it('is caught behind the face however far the paddle moves in one step', () => {
@@ -360,7 +360,7 @@ describe('simulation', () => {
       simulation.state.paddleSpeed = 5;
       expect(simulation.step(0.05, -1)).toEqual(['paddle']);
       expect(simulation.state.right.y).toBe(0);
-      expect(simulation.state.ball.angle).toBeCloseTo(-80 * degrees);
+      expect(simulation.state.ball.angle).toBeCloseTo(-70 * degrees);
     });
 
     it('still gets past a paddle that stays clear of it', () => {
@@ -369,15 +369,24 @@ describe('simulation', () => {
       expect(play(simulation)).toEqual(['point']);
     });
 
-    it('never leaves a paddle steeper than 80 degrees', () => {
+    it('leaves the face of a still paddle flatter than it arrived', () => {
       const simulation = court();
-      // Already at 78 degrees, and the paddle is moving the same way.
+      // Falling at 45 degrees onto the middle of the paddle, which keeps 65% of the slant.
+      rally(simulation, 760, 180, 500, 500);
+      expect(simulation.step(0.03, 0)).toEqual(['paddle']);
+      expect(simulation.state.ball.angle).toBeGreaterThanOrEqual(26 * degrees);
+      expect(simulation.state.ball.angle).toBeLessThanOrEqual(33 * degrees);
+    });
+
+    it('never leaves a paddle steeper than 70 degrees', () => {
+      const simulation = court();
+      // Already at 78 degrees, and the paddle is moving the same way at full speed.
       rally(simulation, 768, 150, 100, 470);
       simulation.state.right.y = 115;
       simulation.state.right.direction = 1;
-      simulation.state.right.held = 1;
+      simulation.state.right.held = 2;
       expect(simulation.step(0.03, 1)).toEqual(['paddle']);
-      expect(simulation.state.ball.angle).toBeCloseTo(80 * degrees);
+      expect(simulation.state.ball.angle).toBeCloseTo(70 * degrees);
     });
   });
 
@@ -477,12 +486,46 @@ describe('simulation', () => {
 
     it('lets the AI meet the ball squarely, on a corner, or on the move', () => {
       expect(returned('center')).toBeCloseTo(0);
-      expect(returned('top')).toBeCloseTo(-70 * degrees);
-      expect(returned('bottom')).toBeCloseTo(70 * degrees);
+      expect(returned('top')).toBeCloseTo(-60 * degrees);
+      expect(returned('bottom')).toBeCloseTo(60 * degrees);
       expect(returned('down')).toBeGreaterThan(20 * degrees);
       expect(returned('down')).toBeLessThan(40 * degrees);
       expect(returned('up')).toBeLessThan(-20 * degrees);
       expect(returned('up')).toBeGreaterThan(-40 * degrees);
+    });
+
+    it('lets the AI miss the ball when its aim is far enough off', () => {
+      const simulation = court(() => 0.5);
+      rally(simulation, 700, 190, -500, 0);
+      // Going for its top corner, but a third of a paddle too high: more than any difficulty's error.
+      simulation.state.left.shot = 'top';
+      simulation.state.left.aim = -0.35;
+      expect(play(simulation)).toEqual(['point']);
+      expect(simulation.state.scores.right).toBe(1);
+      expect(simulation.state.left.aim).toBe(0);
+    });
+
+    it('has the AI react ten times a second', () => {
+      const simulation = court(() => 0.5);
+      // A ball in its zone, well below its paddle, barely moving.
+      rally(simulation, 200, 380, -0.001, 0);
+      const moving: boolean[] = [];
+      for (let frame = 0; frame < 12; frame++) {
+        simulation.step(0.01, 0);
+        moving.push(simulation.state.left.direction !== 0);
+      }
+      // Nothing until its first decision, a tenth of a second in.
+      expect(moving.slice(0, 9)).toEqual(Array(9).fill(false));
+      expect(moving[11]).toBe(true);
+    });
+
+    it('lets the impossible AI react at every step', () => {
+      const simulation = court(() => 0.5);
+      simulation.setOptions({ winningScore: 11, difficulty: 'impossible', paddleSpeed: 1.2 });
+      rally(simulation, 700, 380, -0.001, 0);
+      simulation.step(0.01, 0);
+      expect(simulation.state.left.direction).toBe(1);
+      expect(simulation.state.left.y).toBeGreaterThan(170);
     });
 
     it('has the AI choose a shot when the ball is sent its way', () => {
@@ -491,6 +534,8 @@ describe('simulation', () => {
       simulation.state.left.shot = 'center';
       expect(simulation.step(0.03, 0)).toEqual(['paddle']);
       expect(simulation.state.left.shot).toBe('up');
+      // And how far off it will be: a roll of 0.2 is 60% of normal's error, on the high side.
+      expect(simulation.state.left.aim).toBeCloseTo(-0.06);
     });
 
     it('lets the AI play the left paddle during a rally', () => {
@@ -517,7 +562,8 @@ describe('simulation', () => {
         const simulation = court(() => 0.5);
         simulation.setOptions({ winningScore: 11, difficulty, paddleSpeed: 1.2 });
         rally(simulation, 450, 380, -0.001, 0);
-        simulation.step(0.05, 0);
+        // Long enough for its first decision, a tenth of a second in, and some movement after it.
+        for (let frame = 0; frame < 4; frame++) simulation.step(0.05, 0);
         return simulation.state.left.y;
       };
       expect(leftY('normal')).toBe(170);

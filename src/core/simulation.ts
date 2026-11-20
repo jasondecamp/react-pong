@@ -1,4 +1,4 @@
-import { aiDestination, aiDirection, aiProfiles, aiShot, aiTarget } from './ai.js';
+import { aiAim, aiDestination, aiDirection, aiProfiles, aiShot, aiSwinging, aiTarget } from './ai.js';
 import type { AiShot } from './ai.js';
 import { maxHold, paddleRate } from './paddle.js';
 import type { PongDifficulty, PongPhase, PongScores, Side } from './types.js';
@@ -23,6 +23,8 @@ export type Paddle = {
   target: number | null;
   /** How an AI paddle means to return the ball coming at it. */
   shot: AiShot;
+  /** How far off the mark that return will be, as a fraction of the paddle's height: negative is high, positive low. */
+  aim: number;
 };
 
 export type Ball = {
@@ -123,16 +125,20 @@ const hitSpeedUp = 1.05;
 // A moving paddle drags the ball with it: this fraction of the paddle's own
 // vertical velocity is added to the ball's before its new path is worked out.
 const paddleGrip = 0.5;
+// The face of a paddle also flattens the ball's path: it leaves with this
+// fraction of the slant it arrived with, before the paddle's drag is added.
+// Without it nothing ever brought a steep rally back toward level.
+const slantKept = 0.65;
 // A ball that catches a paddle within one ball size of its top or bottom edge
 // has hit the corner, and leaves steeply toward the ceiling or the floor. One
 // that has got past the paddle's face and is caught by its end leaves at the
 // steepest angle there is.
-const edgeAngle = 70 * degrees;
+const edgeAngle = 60 * degrees;
 // Each hit on a paddle's face also nudges the path at random, by up to this much either way.
 const hitJitter = 3 * degrees;
 // The path never gets steeper than this, so the ball always makes headway
 // across the court.
-const maxAngle = 80 * degrees;
+const maxAngle = 70 * degrees;
 // Wall and paddle bounces resolved in one step; more than enough for 50ms.
 const maxBounces = 8;
 
@@ -152,8 +158,8 @@ export const createSimulation = (random: () => number): Simulation => {
     paddleHeight: 0,
     paddleSpeed: 1.2,
     ball: { x: 0, y: 0, speed: 0, heading: 1, angle: 0 },
-    left: { y: 0, direction: 0, held: 0, target: null, shot: 'center' },
-    right: { y: 0, direction: 0, held: 0, target: null, shot: 'center' },
+    left: { y: 0, direction: 0, held: 0, target: null, shot: 'center', aim: 0 },
+    right: { y: 0, direction: 0, held: 0, target: null, shot: 'center', aim: 0 },
     contact: { side: 'left', x: 0, y: 0 },
     scores: { left: 0, right: 0 },
     phase: 'start',
@@ -167,6 +173,8 @@ export const createSimulation = (random: () => number): Simulation => {
   let winningScore = 11;
   // Seconds since the AI last decided.
   let aiClock = 0;
+  // The AI has begun the swing it planned for the ball coming at it.
+  let aiSwung = false;
   // The ball got past the paddle it was heading for, and is on its way out.
   let missed = false;
   // Seconds into the toss for the first serve.
@@ -219,7 +227,8 @@ export const createSimulation = (random: () => number): Simulation => {
     state.server = server;
     state.countdown = 0;
     state.left.target = server === 'left' ? aiTarget(state, 'left', ai, random) : null;
-    state.left.shot = server === 'left' ? 'center' : aiShot(ai, random);
+    state.left.shot = server === 'left' ? 'center' : aiShot(state, ai, random);
+    state.left.aim = server === 'left' ? 0 : aiAim(ai, random);
     state.phase = 'rally';
     aiClock = 0;
     missed = false;
@@ -283,6 +292,7 @@ export const createSimulation = (random: () => number): Simulation => {
     state.ball.speed = 0;
     state.left.target = null;
     state.left.shot = 'center';
+    state.left.aim = 0;
     steer(state.left, 0);
     events.push('point');
     if (state.scores[scorer] >= winningScore) {
@@ -306,8 +316,12 @@ export const createSimulation = (random: () => number): Simulation => {
     ball.speed *= hitSpeedUp;
     // Having sent the ball away, the AI decides at once where to wait for it.
     // With the ball on its way back, it decides how to return it.
-    if (side === 'left') state.left.target = aiTarget(state, 'left', ai, random);
-    else state.left.shot = aiShot(ai, random);
+    if (side === 'left') {
+      state.left.target = aiTarget(state, 'left', ai, random);
+    } else {
+      state.left.shot = aiShot(state, ai, random);
+      state.left.aim = aiAim(ai, random);
+    }
     events.push('paddle');
   };
 
@@ -329,8 +343,9 @@ export const createSimulation = (random: () => number): Simulation => {
     } else if (center > paddleY + state.paddleHeight - state.ballHeight) {
       angle = edgeAngle;
     } else {
-      const across = ball.speed * Math.cos(ball.angle);
-      const down = ball.speed * Math.sin(ball.angle) + paddleVelocity * paddleGrip;
+      const slant = ball.angle * slantKept;
+      const across = ball.speed * Math.cos(slant);
+      const down = ball.speed * Math.sin(slant) + paddleVelocity * paddleGrip;
       angle = Math.atan2(down, across);
     }
     deflect(side, angle + (random() * 2 - 1) * hitJitter);
@@ -496,6 +511,7 @@ export const createSimulation = (random: () => number): Simulation => {
       state.winner = null;
       state.left.target = null;
       state.left.shot = 'center';
+      state.left.aim = 0;
       steer(state.left, 0);
       steer(state.right, 0);
       parkBall();
@@ -510,10 +526,21 @@ export const createSimulation = (random: () => number): Simulation => {
       const rightBefore = state.right.y;
       steer(state.right, input);
       if (state.phase === 'rally') {
-        // The AI decides at its own fixed rate, whatever the frame rate.
+        // The AI decides at its own fixed rate, whatever the frame rate. A
+        // swing is planned rather than a reaction, so it begins on time
+        // instead of waiting for the next decision.
         aiClock += elapsed;
-        while (aiClock >= 1 / ai.rate) {
-          aiClock -= 1 / ai.rate;
+        const swinging = aiSwinging(state, 'left', ai);
+        if (swinging && !aiSwung && ai.rate !== Infinity) aiClock = Math.max(aiClock, 1 / ai.rate);
+        aiSwung = swinging;
+        const interval = 1 / ai.rate;
+        if (interval <= 0) {
+          // No reaction time at all: it decides at every step.
+          aiClock = 0;
+          steer(state.left, aiDirection(state, 'left', ai, random));
+        }
+        while (interval > 0 && aiClock >= interval) {
+          aiClock -= interval;
           steer(state.left, aiDirection(state, 'left', ai, random));
         }
       }

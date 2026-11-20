@@ -337,10 +337,12 @@ describe('createPong', () => {
       expect(press('d').defaultPrevented).toBe(true);
       expect(pong.getState().difficulty).toBe('hard');
       press('d');
+      expect(pong.getState().difficulty).toBe('impossible');
+      press('d');
       expect(pong.getState().difficulty).toBe('easy');
       press('d');
       expect(pong.getState().difficulty).toBe('normal');
-      expect(onDifficultyChange.mock.calls).toEqual([['hard'], ['easy'], ['normal']]);
+      expect(onDifficultyChange.mock.calls).toEqual([['hard'], ['impossible'], ['easy'], ['normal']]);
     });
 
     it('stays put during a game: in a rally, while paused, and between points', () => {

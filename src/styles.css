@@ -38,6 +38,12 @@
   --pong-difficulty-easy-color: #2a9d5c;
   --pong-difficulty-normal-color: #d9900a;
   --pong-difficulty-hard-color: #e0452c;
+  --pong-difficulty-impossible-color: #7a2bbf;
+  /* On the impossible difficulty the AI's paddle glows like a watching eye,
+     swelling steadily to this hotter color and back without ever going out.
+     The duration is one way, in or out. */
+  --pong-paddle-pulse-color: #ff2a1a;
+  --pong-paddle-pulse-duration: 1.4s;
   /* The help overlay: what it covers the court with, and its text, which is
      heavier than the game's so that small type stays readable. */
   --pong-help-background: #fff;
@@ -100,6 +106,26 @@
 .pong-paddle-right {
   right: 0;
   background-color: var(--pong-paddle-right-color);
+}
+
+.pong-paddle-pulsing {
+  animation: pong-paddle-pulse var(--pong-paddle-pulse-duration) ease-in-out infinite alternate;
+}
+
+/* A steady swell in and out. Even at its lowest the paddle keeps a faint
+   glow, sized like the full one by the paddle's width. */
+@keyframes pong-paddle-pulse {
+  from {
+    background-color: var(--pong-paddle-left-color);
+    box-shadow:
+      0 0 calc(var(--pong-paddle-width) * 0.6) 0 var(--pong-paddle-pulse-color);
+  }
+
+  to {
+    background-color: var(--pong-paddle-pulse-color);
+    box-shadow:
+      0 0 calc(var(--pong-paddle-width) * 2.4) calc(var(--pong-paddle-width) * 0.6) var(--pong-paddle-pulse-color);
+  }
 }
 
 /* A point with no size, which the engine moves to where the ball met a
@@ -255,6 +281,10 @@
   color: var(--pong-difficulty-hard-color);
 }
 
+.pong-difficulty-impossible {
+  color: var(--pong-difficulty-impossible-color);
+}
+
 /* Laid over the court, ball and paddles included. Clicks pass through it, so
    a click anywhere still focuses the court. */
 .pong-help {
@@ -375,5 +405,9 @@
 
   .pong-ripple {
     display: none;
+  }
+
+  .pong-paddle-pulsing {
+    animation: none;
   }
 }

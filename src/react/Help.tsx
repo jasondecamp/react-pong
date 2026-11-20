@@ -29,6 +29,7 @@ const difficultyClasses: Record<PongDifficulty, string> = {
   easy: 'pong-difficulty-easy',
   normal: 'pong-difficulty-normal',
   hard: 'pong-difficulty-hard',
+  impossible: 'pong-difficulty-impossible',
 };
 
 /**

@@ -52,7 +52,7 @@ const snippet = (options: Options, declarations: string[]) => {
 export const App = () => {
   const [options, setOptions] = useState(initialOptions);
   const [theme, setTheme] = useState(defaultTheme);
-  const [panelOpen, setPanelOpen] = useState(true);
+  const [panelOpen, setPanelOpen] = useState(false);
   const declarations = themeDeclarations(theme);
 
   const setOption = (name: string, value: ControlValue) => setOptions((current) => ({ ...current, [name]: value }));
@@ -93,6 +93,7 @@ export const App = () => {
                 <Controls.ChoiceOption value='easy' label='Easy' />
                 <Controls.ChoiceOption value='normal' label='Normal' />
                 <Controls.ChoiceOption value='hard' label='Hard' />
+                <Controls.ChoiceOption value='impossible' label='Impossible' />
               </Controls.Choice>
               <Controls.Slider name='paddleSpeed' label='Paddle speed (court heights/s)' min={0} max={4} step={0.1} />
               <Controls.Choice name='keys' label='Keys'>

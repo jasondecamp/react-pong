@@ -35,8 +35,11 @@ export type PongMessageKey =
   | 'gameOver'
   | 'reset';
 
-/** How early the AI reacts to the ball, and how well it places itself between hits. */
-export type PongDifficulty = 'easy' | 'normal' | 'hard';
+/**
+ * How early the AI reacts to the ball, and how well it places itself between hits. `impossible` has no handicap
+ * at all.
+ */
+export type PongDifficulty = 'easy' | 'normal' | 'hard' | 'impossible';
 
 /** Something a key can do. */
 export type PongAction = 'up' | 'down' | 'serve' | 'pause' | 'reset' | 'help' | 'difficulty';
@@ -91,7 +94,10 @@ export type PongOptions = {
    * How early the AI reacts to a ball coming at it, and where it waits after sending the ball away. `'easy'`
    * reacts in the third of the court nearest its paddle and waits level with where its shot will reach the
    * opponent; `'normal'` reacts in its own half and waits somewhere at random; `'hard'` reacts in the two thirds
-   * nearest its paddle and waits where an unaltered return will come back to. The difficulty key steps through
+   * nearest its paddle and waits where an unaltered return will come back to. It also aims better the harder it
+   * is: its returns are off by up to 17.5%, 10%, and 4% of a paddle's height. `'impossible'` has no handicap: it
+   * decides at every step instead of ten times a second, never hesitates, aims exactly, and works out where the
+   * ball will arrive the moment it is hit and goes straight there. Its paddle is no faster than yours. The difficulty key steps through
    * them between games. Default `'normal'`.
    */
   difficulty?: PongDifficulty;

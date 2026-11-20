@@ -4,7 +4,7 @@ import type { PongDifficulty, Side } from './types.js';
 
 /** How an AI paddle plays. Distances are fractions of the court width, measured from the paddle's own edge. */
 export type AiProfile = {
-  /** Decisions per second. */
+  /** Decisions per second. `Infinity` decides at every step. */
   rate: number;
   /** Within this distance of its edge the ball is urgent. */
   nearZone: number;
@@ -29,6 +29,22 @@ export type AiProfile = {
   swingChance: number;
   /** How long before the ball arrives a swing begins, in seconds. */
   swingLead: number;
+  /**
+   * How far off the mark its returns can be, as a fraction of the paddle's height: each ball sent its way gets
+   * an error of up to this much either way, which shifts where on the paddle the ball lands.
+   */
+  aimError: number;
+  /**
+   * It works out where the ball will arrive, walls included, the moment the ball is hit, and goes straight
+   * there, instead of following the ball once it is close. While the ball is on its way to the opponent it
+   * makes for where a plain return would come back to, and never waits anywhere else.
+   */
+  foresight: boolean;
+  /**
+   * A ball sent its way on a path steeper than this, in radians, is one it tries to flatten: its swings go
+   * against the ball rather than either way.
+   */
+  steepAngle: number;
 };
 
 /**
@@ -37,12 +53,13 @@ export type AiProfile = {
  */
 export type AiShot = 'center' | 'top' | 'bottom' | 'up' | 'down';
 
-// The original AI's character, which decided every 10ms: mostly it follows the
-// ball once the ball is close, now and then it gives up for a moment (which
-// also costs it the speed it had built up), and it stops chasing once the ball
-// is level with its paddle.
+// The original AI's character: mostly it follows the ball once the ball is
+// close, now and then it gives up for a moment (which also costs it the speed
+// it had built up), and it stops chasing once the ball is level with its
+// paddle. The original decided every 10ms; this one reacts ten times a second,
+// which is nearer to what a person can do.
 const character = {
-  rate: 100,
+  rate: 10,
   nearZone: 0.05,
   nearChance: 0.26,
   trackChance: 0.96,
@@ -50,15 +67,31 @@ const character = {
   cornerChance: 0.15,
   swingChance: 0.5,
   swingLead: 0.2,
+  foresight: false,
+  steepAngle: Math.PI / 6,
 };
 
 // The difficulties differ in how early the paddle starts to react to a ball
 // coming at it (in the last third of the court before its edge, in its own
-// half, or in the two thirds nearest to it) and in where it waits meanwhile.
+// half, or in the two thirds nearest to it), in where it waits meanwhile, and
+// in how well it aims.
 export const aiProfiles: Record<PongDifficulty, AiProfile> = {
-  easy: { ...character, trackZone: 1 / 3, positioning: 'opponent' },
-  normal: { ...character, trackZone: 1 / 2, positioning: 'random' },
-  hard: { ...character, trackZone: 2 / 3, positioning: 'return' },
+  easy: { ...character, trackZone: 1 / 3, positioning: 'opponent', aimError: 0.175 },
+  normal: { ...character, trackZone: 1 / 2, positioning: 'random', aimError: 0.1 },
+  hard: { ...character, trackZone: 2 / 3, positioning: 'return', aimError: 0.04 },
+  // No handicap at all: it decides at every step, never hesitates, aims
+  // exactly, and knows where the ball is going from the moment it is hit. Only
+  // the speed of its paddle, which is the same as yours, can beat it.
+  impossible: {
+    ...character,
+    rate: Infinity,
+    nearChance: 1,
+    trackZone: Infinity,
+    trackChance: 1,
+    positioning: 'return',
+    aimError: 0,
+    foresight: true,
+  },
 };
 
 /** The ball's distance from the edge that `side` defends. */
@@ -91,21 +124,49 @@ const timeToReach = (state: SimulationState, side: Side) => {
 };
 
 /**
+ * Seconds until the ball is next at the face of the paddle on `side`: when it
+ * arrives if it is coming, and otherwise when it would be back if the far
+ * paddle returned it without changing its speed.
+ */
+const timeToArrive = (state: SimulationState, side: Side) => {
+  const { ball } = state;
+  const coming = timeToReach(state, side);
+  if (coming !== Infinity) return coming;
+  const across = ball.speed * Math.cos(ball.angle);
+  if (across <= 0) return 0;
+  const crossing = state.width - 2 * state.paddleWidth - state.ballWidth;
+  const gap = side === 'left'
+    ? state.width - state.paddleWidth - state.ballWidth - ball.x
+    : ball.x - state.paddleWidth;
+  return (Math.max(0, gap) + crossing) / across;
+};
+
+/** How far ahead the paddle on `side` looks when it places itself: all the way, with foresight. */
+const lookAhead = (state: SimulationState, side: Side, profile: AiProfile) => (
+  profile.foresight ? timeToArrive(state, side) : timeToReach(state, side)
+);
+
+/**
  * Where the top edge of the paddle on `side` should be right now to play its
  * shot, with the ball `time` seconds away. It lines up the part of the paddle
  * the shot calls for with where the ball will be a moment from now (when it
- * arrives, once that is within the swing lead). For a swing it also hangs
+ * arrives, once that is within the swing lead; with foresight, always when it
+ * arrives). For a swing it also hangs
  * back by the distance it has yet to cover on the way in, picking up speed
- * from a standstill.
+ * from a standstill. All of it is off by the paddle's aiming error.
  */
 const shotPosition = (state: SimulationState, side: Side, profile: AiProfile, time: number) => {
   const { ball } = state;
-  const { shot } = state[side];
+  const { aim } = state[side];
+  // A shot is chosen for a ball on its way; one going away is simply waited for.
+  const shot = ball.heading === (side === 'left' ? -1 : 1) ? state[side].shot : 'center';
   const lead = Math.min(time, profile.swingLead);
-  const ballY = fold(ball.y + ball.speed * Math.sin(ball.angle) * lead, state.height - state.ballHeight);
+  const ahead = profile.foresight ? time : lead;
+  const ballY = fold(ball.y + ball.speed * Math.sin(ball.angle) * ahead, state.height - state.ballHeight);
   let contact = state.paddleHeight / 2;
   if (shot === 'top') contact = state.ballHeight / 4;
   else if (shot === 'bottom') contact = state.paddleHeight - state.ballHeight / 4;
+  contact += aim * state.paddleHeight;
   const remaining = paddleTravel(profile.swingLead) - paddleTravel(profile.swingLead - lead);
   const runUp = swingOf(shot) * state.paddleSpeed * state.height * remaining;
   const maxPaddleY = Math.max(0, state.height - state.paddleHeight);
@@ -118,7 +179,7 @@ const shotPosition = (state: SimulationState, side: Side, profile: AiProfile, ti
  * heading away or not yet inside its track zone.
  */
 const aiSeeking = (state: SimulationState, side: Side, profile: AiProfile) => {
-  if (state[side].target == null) return false;
+  if (state[side].target == null || profile.foresight) return false;
   const away = state.ball.heading === (side === 'left' ? 1 : -1);
   return away || distanceFrom(state, side) >= state.width * profile.trackZone;
 };
@@ -131,20 +192,54 @@ const aiSeeking = (state: SimulationState, side: Side, profile: AiProfile) => {
 export const aiDestination = (state: SimulationState, side: Side, profile: AiProfile) => {
   const paddle = state[side];
   if (aiSeeking(state, side, profile)) return paddle.target;
-  const time = timeToReach(state, side);
-  if (swingOf(paddle.shot) !== 0 && time <= profile.swingLead) return null;
-  return shotPosition(state, side, profile, time);
+  if (swingOf(paddle.shot) !== 0 && timeToReach(state, side) <= profile.swingLead) return null;
+  return shotPosition(state, side, profile, lookAhead(state, side, profile));
 };
 
 /**
- * How to return the next ball, decided the moment the opponent sends it:
- * sometimes on a corner, often on the move, otherwise squarely.
+ * Whether the paddle on `side` should be swinging through the ball right
+ * now: it means to, and the ball is within the swing's lead of arriving.
  */
-export const aiShot = (profile: AiProfile, random: () => number): AiShot => {
+export const aiSwinging = (state: SimulationState, side: Side, profile: AiProfile) => (
+  swingOf(state[side].shot) !== 0
+  && !aiSeeking(state, side, profile)
+  && timeToReach(state, side) <= profile.swingLead
+);
+
+/**
+ * How far off the mark the next return will be, as a fraction of the
+ * paddle's height, decided along with the shot.
+ */
+export const aiAim = (profile: AiProfile, random: () => number) => (random() * 2 - 1) * profile.aimError;
+
+/**
+ * Which way the ball just sent across the court will be moving when it gets
+ * there, up (`-1`) or down (`1`): each wall it meets on the way turns it round.
+ */
+const arrivalDrift = (state: SimulationState): Direction => {
+  const { ball } = state;
+  const maxBallY = state.height - state.ballHeight;
+  if (ball.angle === 0 || maxBallY <= 0) return 0;
+  const crossing = state.width - 2 * state.paddleWidth - state.ballWidth;
+  const walls = Math.abs(Math.floor((ball.y + Math.tan(ball.angle) * crossing) / maxBallY));
+  const setOff: Direction = ball.angle > 0 ? 1 : -1;
+  if (walls % 2 === 1) return setOff > 0 ? -1 : 1;
+  return setOff;
+};
+
+/**
+ * How to return the ball in `state`, decided the moment the opponent sends
+ * it: sometimes on a corner, often on the move, otherwise squarely. A swing
+ * goes either way, unless the ball is on a steep path: then it goes against
+ * the ball, which flattens the path instead of steepening it further.
+ */
+export const aiShot = (state: SimulationState, profile: AiProfile, random: () => number): AiShot => {
   const roll = random();
   if (roll < profile.cornerChance) return random() < 0.5 ? 'top' : 'bottom';
-  if (roll < profile.cornerChance + profile.swingChance) return random() < 0.5 ? 'up' : 'down';
-  return 'center';
+  if (roll >= profile.cornerChance + profile.swingChance) return 'center';
+  const drift = arrivalDrift(state);
+  if (drift !== 0 && Math.abs(state.ball.angle) > profile.steepAngle) return drift > 0 ? 'up' : 'down';
+  return random() < 0.5 ? 'up' : 'down';
 };
 
 /**
@@ -183,7 +278,7 @@ export const aiDirection = (
   const distance = distanceFrom(state, side);
   const swing = swingOf(paddle.shot);
   const time = timeToReach(state, side);
-  const offset = shotPosition(state, side, profile, time) - paddle.y;
+  const offset = shotPosition(state, side, profile, lookAhead(state, side, profile)) - paddle.y;
   // How far the middle of the paddle can be from the ball and still meet it squarely.
   const slack = Math.max(0, state.paddleHeight / 2 - state.ballHeight);
   let toward: Direction = 0;

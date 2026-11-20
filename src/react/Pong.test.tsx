@@ -103,6 +103,15 @@ describe('Pong', () => {
     expect(screen.queryByText('1')).not.toBeInTheDocument();
   });
 
+  it('pulses the AI\'s paddle on the impossible difficulty only', () => {
+    const { container, rerender } = render(<Pong difficulty='impossible' />);
+    const left = container.querySelector('.pong-paddle-left');
+    expect(left).toHaveClass('pong-paddle-pulsing');
+    expect(container.querySelector('.pong-paddle-right')).not.toHaveClass('pong-paddle-pulsing');
+    rerender(<Pong difficulty='hard' />);
+    expect(left).not.toHaveClass('pong-paddle-pulsing');
+  });
+
   it('focuses the court on mount when asked to', () => {
     render(<Pong><Pong.Court autoFocus /></Pong>);
     expect(screen.getByRole('application')).toHaveFocus();
