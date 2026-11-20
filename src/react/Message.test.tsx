@@ -60,6 +60,20 @@ describe('Message', () => {
     expect(message).toHaveTextContent('Shall we play a game?');
   });
 
+  it('announces the toss, who serves, and the countdown', () => {
+    const { message, set } = renderMessage();
+    set({ phase: 'toss', message: 'toss' });
+    expect(message).toHaveTextContent('Who serves first?');
+    set({ message: 'serve.human', countdown: 3 });
+    expect(message).toHaveTextContent('Your serve.3');
+    expect(screen.getByText('3')).toHaveClass('pong-countdown');
+    set({ message: 'serve.ai', countdown: 1 });
+    expect(message).toHaveTextContent('My serve.1');
+    set({ phase: 'rally', message: null, countdown: null });
+    expect(message).toHaveClass('pong-message-hidden');
+    expect(message).toHaveTextContent('My serve.');
+  });
+
   it('says the game is over, and how to reset it', () => {
     const { message, set } = renderMessage();
     set({ message: 'gameOver' });
@@ -92,8 +106,20 @@ describe('Message', () => {
   });
 
   it('starts the deck again only once every line has been said', () => {
-    const lines = dealt('smack.ai', 26, 0.42);
-    expect(lines[25]).toBe(lines[0]);
+    const lines = dealt('smack.ai', 27, 0.42);
+    expect(lines[26]).toBe(lines[0]);
+    expect(lines).toContain('A strange game. The only winning move is not to play.');
+  });
+
+  it('speaks smack talk in the AI\'s color, and nothing else', () => {
+    const { message, set } = renderMessage();
+    expect(message).not.toHaveClass('pong-message-smack');
+    set({ message: 'smack.ai', messageCount: 0, matchRoll: 0.3 });
+    expect(message).toHaveClass('pong-message-smack');
+    set({ message: null });
+    expect(message).toHaveClass('pong-message-smack', 'pong-message-hidden');
+    set({ message: 'paused' });
+    expect(message).not.toHaveClass('pong-message-smack');
   });
 
   it('fades smack talk after 5 seconds', () => {
@@ -124,6 +150,6 @@ describe('Message', () => {
     set({ message: 'paused' });
     act(() => vi.advanceTimersByTime(60000));
     expect(message).not.toHaveClass('pong-message-hidden');
-    expect(message).toHaveTextContent('PAUSEDpress esc to resume');
+    expect(message).toHaveTextContent('PAUSEDpress space to resume');
   });
 });

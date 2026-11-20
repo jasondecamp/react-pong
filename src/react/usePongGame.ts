@@ -11,11 +11,15 @@ export type PongGame = PongState & {
   resume: () => void;
   /** Return to the start screen with the scores cleared. */
   reset: () => void;
+  /** Open the help, pausing a rally first. */
+  openHelp: () => void;
+  /** Close the help. A rally it paused stays paused. */
+  closeHelp: () => void;
 };
 
 /**
  * The state and controls of the nearest `<Pong>`, for custom subcomponents.
- * It re-renders on score, phase, and message changes, never per frame, and the
+ * It re-renders only when something in the state changes, never per frame, and the
  * controls are stable across renders. Outside a `<Pong>` it returns the start
  * screen and controls that do nothing.
  */
@@ -28,5 +32,7 @@ export const usePongGame = (): PongGame => {
     pause: store.pause,
     resume: store.resume,
     reset: store.reset,
+    openHelp: store.openHelp,
+    closeHelp: store.closeHelp,
   }), [state, store]);
 };

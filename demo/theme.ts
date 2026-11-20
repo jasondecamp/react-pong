@@ -3,9 +3,9 @@
 
 export type Theme = {
   color: string;
-  /** Empty follows `color`. */
+  /** Empty keeps the package default. */
   ballColor: string;
-  /** Empty follows `color`. */
+  /** Empty keeps the package default. */
   leftPaddleColor: string;
   /** Empty follows `color`. */
   rightPaddleColor: string;
@@ -21,8 +21,8 @@ export type Theme = {
 
 export const defaultTheme: Theme = {
   color: '#007ee5',
-  ballColor: '',
-  leftPaddleColor: '',
+  ballColor: '#000000',
+  leftPaddleColor: '#a61c28',
   rightPaddleColor: '',
   muted: '#ccc',
   ballSize: 15,
@@ -31,7 +31,7 @@ export const defaultTheme: Theme = {
   rippleSize: 240,
   rippleDuration: 0.6,
   scoreSize: 50,
-  messageSize: 30,
+  messageSize: 52,
 };
 
 const properties: Record<keyof Theme, { property: string; unit: string }> = {
@@ -54,5 +54,5 @@ const clean = (value: string | number) => String(value).replace(/[;{}<>]/g, '');
 
 /** A CSS declaration for each property that differs from its default. */
 export const themeDeclarations = (theme: Theme) => (Object.keys(properties) as (keyof Theme)[])
-  .filter((key) => theme[key] !== defaultTheme[key])
+  .filter((key) => theme[key] !== defaultTheme[key] && theme[key] !== '')
   .map((key) => `${properties[key].property}: ${clean(theme[key])}${properties[key].unit};`);

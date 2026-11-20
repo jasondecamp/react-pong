@@ -12,7 +12,7 @@ const smackDuration = 5000;
 
 /** The game's message, in the original's words. It fades in and out rather than popping. */
 export const Message = ({ className }: MessageProps) => {
-  const { message, messageCount, matchRoll } = usePongGame();
+  const { message, messageCount, matchRoll, countdown } = usePongGame();
   // Which posting this is: a key can come round again with a different line.
   const id = `${matchRoll}:${message}:${messageCount}`;
   // The last message stays rendered while it fades out.
@@ -33,12 +33,18 @@ export const Message = ({ className }: MessageProps) => {
   const copy = shown.message == null ? null : messageCopy(shown.message, shown.messageCount, shown.matchRoll);
   return (
     <p
-      className={classNames('pong-message', hidden && 'pong-message-hidden', className)}
+      className={classNames(
+        'pong-message',
+        isSmack(shown.message) && 'pong-message-smack',
+        hidden && 'pong-message-hidden',
+        className,
+      )}
       aria-live='polite'
       aria-hidden={hidden}
     >
       {copy?.text}
       {copy?.hint != null && <span className='pong-hint'>{copy.hint}</span>}
+      {message != null && countdown != null && <span className='pong-countdown'>{countdown}</span>}
     </p>
   );
 };

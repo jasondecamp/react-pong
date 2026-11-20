@@ -18,6 +18,8 @@ export type PongStore = {
   pause: () => void;
   resume: () => void;
   reset: () => void;
+  openHelp: () => void;
+  closeHelp: () => void;
 };
 
 // A key map is compared by value, so an inline `keys={{ w: 'up' }}` doesn't
@@ -91,6 +93,8 @@ export const createPongStore = (): PongStore => {
     pause: () => engine?.pause(),
     resume: () => engine?.resume(),
     reset: () => engine?.reset(),
+    openHelp: () => engine?.openHelp(),
+    closeHelp: () => engine?.closeHelp(),
   };
 };
 
@@ -105,4 +109,6 @@ export const inertPongStore: PongStore = {
   pause: () => {},
   resume: () => {},
   reset: () => {},
+  openHelp: () => {},
+  closeHelp: () => {},
 };

@@ -34,7 +34,7 @@ afterEach(() => {
 });
 
 describe('Pong', () => {
-  it('renders the default arrangement: court, score, and message', () => {
+  it('renders the default arrangement: court, score, message, and help', () => {
     const { container } = render(<Pong />);
     const court = screen.getByRole('application', { name: 'Pong court' });
     expect(court).toHaveAttribute('tabindex', '0');
@@ -44,6 +44,8 @@ describe('Pong', () => {
     expect(container.querySelector('.pong-score')).toHaveTextContent('0:0');
     expect(screen.getByText('Shall we play a game?')).toBeVisible();
     expect(screen.getByText('press enter to start')).toHaveClass('pong-hint');
+    expect(screen.getByText('press ? for help')).toHaveClass('pong-hint');
+    expect(container.querySelector('.pong-help')).toHaveClass('pong-help-hidden');
   });
 
   it('adds its className to the root', () => {
@@ -72,7 +74,7 @@ describe('Pong', () => {
 
   it('plays from the keyboard once the court is clicked', async () => {
     const user = userEvent.setup();
-    render(<Pong><Pong.Court /><Pong.Message /><Phase /></Pong>);
+    render(<Pong toss={false}><Pong.Court /><Pong.Message /><Phase /></Pong>);
     await user.keyboard('{Enter}');
     expect(screen.getByTestId('phase')).toHaveTextContent('start');
 
@@ -81,9 +83,24 @@ describe('Pong', () => {
     expect(screen.getByTestId('phase')).toHaveTextContent('rally');
     expect(screen.getByText('Shall we play a game?')).toHaveClass('pong-message-hidden');
 
-    await user.keyboard('{Escape}');
+    await user.keyboard(' ');
     expect(screen.getByTestId('phase')).toHaveTextContent('paused');
     expect(screen.getByText('PAUSED')).not.toHaveClass('pong-message-hidden');
+  });
+
+  it('opens a match with the toss and its countdown', async () => {
+    const user = userEvent.setup();
+    render(<Pong><Pong.Court autoFocus /><Pong.Message /><Phase /></Pong>);
+    await user.keyboard('{Enter}');
+    expect(screen.getByTestId('phase')).toHaveTextContent('toss');
+    expect(screen.getByText('Who serves first?')).toBeVisible();
+    // One frame to an act, so each count reaches the page before the next is looked for.
+    for (let frame = 0; frame < 600 && screen.queryByText('3') == null; frame++) act(() => browser.frame());
+    expect(screen.getByText('3')).toHaveClass('pong-countdown');
+    expect(screen.getByText(/^(My|Your) serve\.$/)).toBeInTheDocument();
+    for (let frame = 0; frame < 600 && screen.queryByText('rally') == null; frame++) act(() => browser.frame());
+    expect(screen.getByTestId('phase')).toHaveTextContent('rally');
+    expect(screen.queryByText('1')).not.toBeInTheDocument();
   });
 
   it('focuses the court on mount when asked to', () => {
@@ -132,7 +149,7 @@ describe('Pong', () => {
       const { phase, serve } = usePongGame();
       return <button type='button' onClick={() => serve()}>{phase}</button>;
     };
-    render(<Pong><Pong.Court /><Serve /></Pong>);
+    render(<Pong toss={false}><Pong.Court /><Serve /></Pong>);
     await user.click(screen.getByRole('button', { name: 'start' }));
     expect(screen.getByRole('button', { name: 'rally' })).toBeInTheDocument();
   });
@@ -147,8 +164,8 @@ describe('Pong', () => {
     const user = userEvent.setup();
     render(
       <>
-        <Pong><Pong.Court aria-label='First' /><Pong.Message /></Pong>
-        <Pong><Pong.Court aria-label='Second' /><Pong.Message /></Pong>
+        <Pong toss={false}><Pong.Court aria-label='First' /><Pong.Message /></Pong>
+        <Pong toss={false}><Pong.Court aria-label='Second' /><Pong.Message /></Pong>
       </>,
     );
     await user.click(screen.getByRole('application', { name: 'Second' }));
@@ -162,7 +179,7 @@ describe('Pong', () => {
     const user = userEvent.setup();
     const { unmount } = render(
       <StrictMode>
-        <Pong><Pong.Court autoFocus /><Phase /></Pong>
+        <Pong toss={false}><Pong.Court autoFocus /><Phase /></Pong>
       </StrictMode>,
     );
     expect(live(browser.observers.resize)).toHaveLength(1);

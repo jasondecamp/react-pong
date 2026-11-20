@@ -2,20 +2,23 @@
  * react-pong. Import once: import 'react-pong/styles.css'.
  *
  * Theme it by setting these custom properties on the root, through <Pong>'s
- * className. The defaults are the original's values, and :where() keeps them
- * at zero specificity so any class of yours wins.
+ * className. Most defaults are the original's values, and :where() keeps
+ * them at zero specificity so any class of yours wins.
  */
 :where(.pong) {
   --pong-color: #007ee5;
-  /* The ball and each paddle follow --pong-color unless given their own. */
-  --pong-ball-color: var(--pong-color);
-  --pong-paddle-left-color: var(--pong-color);
+  /* The ball is black, the AI's paddle (left) dark maroon, and yours follows
+     --pong-color. */
+  --pong-ball-color: #000;
+  --pong-paddle-left-color: #a61c28;
   --pong-paddle-right-color: var(--pong-color);
   /* The rings where the ball meets a paddle follow that paddle's color. */
   --pong-ripple-left-color: var(--pong-paddle-left-color);
   --pong-ripple-right-color: var(--pong-paddle-right-color);
   --pong-muted: #ccc;
   --pong-message-color: color-mix(in srgb, var(--pong-color) 50%, transparent);
+  /* Smack talk is the AI speaking, so it follows the AI's paddle. */
+  --pong-smack-color: var(--pong-paddle-left-color);
   --pong-focus-color: var(--pong-muted);
   --pong-font: inherit;
   --pong-font-weight: 100;
@@ -29,8 +32,18 @@
   --pong-ripple-width: 2px;
   --pong-ripple-duration: 0.6s;
   --pong-score-size: 50px;
-  --pong-message-size: 30px;
+  --pong-message-size: 52px;
   --pong-hint-size: 12px;
+  /* The difficulty shown above the score, a color for each. */
+  --pong-difficulty-easy-color: #2a9d5c;
+  --pong-difficulty-normal-color: #d9900a;
+  --pong-difficulty-hard-color: #e0452c;
+  /* The help overlay: what it covers the court with, and its text, which is
+     heavier than the game's so that small type stays readable. */
+  --pong-help-background: #fff;
+  --pong-help-color: color-mix(in srgb, var(--pong-color) 80%, transparent);
+  --pong-help-size: 18px;
+  --pong-help-font-weight: 400;
 }
 
 /* Fills its parent. The court is stacked over the score and message, so the
@@ -190,6 +203,10 @@
   transform: translate(-50%, -50%);
 }
 
+.pong-message-smack {
+  color: var(--pong-smack-color);
+}
+
 .pong-message-hidden {
   opacity: 0;
 }
@@ -202,9 +219,157 @@
   text-transform: uppercase;
 }
 
+/* The difficulty and, under it, the help hint, just above the score. The gap
+   below clears the winner's scaled-up score. */
+.pong-help-hints {
+  position: absolute;
+  bottom: calc(var(--pong-score-size) * 1.2 + 1.5em);
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5em;
+  width: max-content;
+  max-width: 90%;
+  font-size: var(--pong-hint-size);
+  transform: translateX(-50%);
+}
+
+.pong-help-hints .pong-hint {
+  margin: 0;
+  text-align: center;
+}
+
+.pong-difficulty {
+  font-weight: var(--pong-font-weight-bold);
+}
+
+.pong-difficulty-easy {
+  color: var(--pong-difficulty-easy-color);
+}
+
+.pong-difficulty-normal {
+  color: var(--pong-difficulty-normal-color);
+}
+
+.pong-difficulty-hard {
+  color: var(--pong-difficulty-hard-color);
+}
+
+/* Laid over the court, ball and paddles included. Clicks pass through it, so
+   a click anywhere still focuses the court. */
+.pong-help {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5em;
+  align-items: center;
+  justify-content: center;
+  padding: 1em;
+  font-size: var(--pong-help-size);
+  font-weight: var(--pong-help-font-weight);
+  line-height: 1.4;
+  color: var(--pong-help-color);
+  pointer-events: none;
+  background-color: var(--pong-help-background);
+  transition: opacity 0.2s, visibility 0.2s;
+}
+
+.pong-help-hidden {
+  visibility: hidden;
+  opacity: 0;
+}
+
+/* The score to play to heads the help, with the number picked out. */
+.pong-help-goal {
+  margin: 0;
+  font-size: 1.75em;
+  font-weight: var(--pong-font-weight);
+  line-height: 1;
+  color: var(--pong-color);
+}
+
+.pong-help-goal-score {
+  font-weight: var(--pong-font-weight-bold);
+}
+
+/* In the help, hints scale with its text and share its weight. */
+.pong-help .pong-hint {
+  margin: 0;
+  font-size: 0.75em;
+}
+
+/* One grid for the keys and the advanced section under them, so their
+   columns line up: a key or a term, then what it does. */
+.pong-help-list {
+  display: grid;
+  grid-template-columns: auto minmax(0, 24em);
+  gap: 0.75em 1.5em;
+  align-items: baseline;
+}
+
+.pong-help-keys,
+.pong-help-tips,
+.pong-help-row {
+  display: contents;
+}
+
+.pong-help-key {
+  display: flex;
+  gap: 0.4em;
+  justify-content: flex-end;
+}
+
+.pong-help-cap {
+  box-sizing: border-box;
+  min-width: 2em;
+  padding: 0.2em 0.5em;
+  font: inherit;
+  line-height: 1.2;
+  color: var(--pong-color);
+  text-align: center;
+  border: 1px solid currentcolor;
+  border-radius: 0.3em;
+}
+
+.pong-help-action {
+  margin: 0;
+}
+
+/* The advanced section's heading spans both columns, between two rules. */
+.pong-help .pong-help-heading {
+  display: flex;
+  grid-column: 1 / -1;
+  gap: 1em;
+  align-items: center;
+  margin-top: 0.75em;
+}
+
+.pong-help-heading::before,
+.pong-help-heading::after {
+  flex: 1;
+  content: '';
+  border-top: 1px solid currentcolor;
+}
+
+.pong-help-term {
+  font-weight: var(--pong-font-weight-bold);
+  color: var(--pong-color);
+  text-align: right;
+}
+
+/* The count before the first serve, under the name of whoever serves it. */
+.pong-countdown {
+  display: block;
+  font-weight: var(--pong-font-weight-bold);
+  color: var(--pong-color);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .pong-score-side,
-  .pong-message {
+  .pong-message,
+  .pong-help {
     transition: none;
   }
 

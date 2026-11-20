@@ -99,6 +99,103 @@ describe('simulation', () => {
     });
   });
 
+  describe('toss', () => {
+    it('bounces the ball between the paddles, rests it on the server\'s, counts down, and serves', () => {
+      const simulation = court(() => 0.2);
+      simulation.toss(true);
+      const { state } = simulation;
+      expect(state.phase).toBe('toss');
+      expect(state.server).toBe('left');
+      // From the middle of the court, between the two faces at 15 and 770.
+      expect(state.ball.x).toBeCloseTo(392.5);
+      expect(state.countdown).toBe(0);
+
+      const events: string[] = [];
+      const xs: number[] = [];
+      for (let frame = 0; frame < 600 && state.phase === 'toss'; frame++) {
+        events.push(...simulation.step(1 / 60, 0));
+        if (state.countdown === 0 && state.phase === 'toss') xs.push(state.ball.x);
+      }
+      // Three bounces on the way, receiver first, before it settles.
+      expect(events).toEqual(['paddle', 'paddle', 'paddle', 'toss', 'count', 'count', 'serve']);
+      expect(xs[0]).toBeGreaterThan(392.5);
+      expect(Math.max(...xs)).toBeGreaterThan(740);
+      expect(Math.min(...xs)).toBeLessThan(45);
+      expect(state.phase).toBe('rally');
+      expect(state.countdown).toBe(0);
+      expect(state.ball.heading).toBe(1);
+      expect(state.ball.speed).toBeGreaterThan(0);
+    });
+
+    it('settles on the right paddle when the right side wins it', () => {
+      const simulation = court(() => 0.8);
+      simulation.toss(true);
+      const events: string[] = [];
+      while (!events.includes('toss')) events.push(...simulation.step(1 / 60, 0));
+      expect(simulation.state.server).toBe('right');
+      expect(simulation.state.ball.x).toBe(770);
+      expect(simulation.state.countdown).toBe(3);
+      expect(simulation.state.contact.side).toBe('left');
+    });
+
+    it('takes 1.8 seconds to settle and 0.6 for each count', () => {
+      const simulation = court();
+      simulation.toss(true);
+      const times: Record<string, number[]> = {};
+      for (let frame = 1; simulation.state.phase === 'toss'; frame++) {
+        for (const event of simulation.step(0.01, 0)) (times[event] ??= []).push(frame / 100);
+      }
+      expect(times.toss?.[0]).toBeCloseTo(1.8, 1);
+      expect(times.count?.[0]).toBeCloseTo(2.4, 1);
+      expect(times.count?.[1]).toBeCloseTo(3, 1);
+      expect(times.serve?.[0]).toBeCloseTo(3.6, 1);
+    });
+
+    it('goes straight to the countdown when it is not animated', () => {
+      const simulation = court(() => 0.8);
+      simulation.toss(false);
+      expect(simulation.state.ball.x).toBe(770);
+      expect(simulation.step(1 / 60, 0)).toEqual(['toss']);
+      expect(simulation.state.countdown).toBe(3);
+    });
+
+    it('keeps the ball on the server\'s paddle as it moves during the countdown', () => {
+      const simulation = court(() => 0.8);
+      simulation.toss(false);
+      for (let frame = 0; frame < 30; frame++) simulation.step(1 / 60, 1);
+      const { ball, right } = simulation.state;
+      expect(right.y).toBeGreaterThan(170);
+      expect(ball.y).toBeCloseTo(right.y + 22.5);
+      play(simulation);
+      expect(simulation.state.phase).toBe('rally');
+    });
+
+    it('serves from the same side that a plain serve would have', () => {
+      const tossed = court(seededRandom(7));
+      tossed.toss(false);
+      play(tossed);
+      const served = court(seededRandom(7));
+      served.serve();
+      expect(tossed.state.ball).toEqual(served.state.ball);
+    });
+
+    it('is only for the first serve, and a serve can\'t cut it short', () => {
+      const simulation = court();
+      simulation.toss(true);
+      simulation.serve();
+      expect(simulation.state.phase).toBe('toss');
+      simulation.reset();
+      expect(simulation.state.phase).toBe('start');
+      expect(simulation.state.ball.x).toBeLessThan(0);
+
+      simulation.serve();
+      play(simulation);
+      expect(simulation.state.phase).toBe('between');
+      simulation.toss(true);
+      expect(simulation.state.phase).toBe('between');
+    });
+  });
+
   describe('ball', () => {
     it('moves by time, not by frame', () => {
       const one = court();

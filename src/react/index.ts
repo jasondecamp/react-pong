@@ -1,6 +1,7 @@
 export { Pong } from './Pong.js';
 export type { PongProps } from './Pong.js';
 export type { CourtProps } from './Court.js';
+export type { HelpProps } from './Help.js';
 export type { MessageProps } from './Message.js';
 export type { ScoreProps } from './Score.js';
 export { usePongGame } from './usePongGame.js';

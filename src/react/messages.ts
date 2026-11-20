@@ -6,11 +6,14 @@ export type MessageCopy = {
   hint?: string;
 };
 
-// The original's copy, word for word, except `paused`: the original said
-// nothing while paused.
+// The original's copy, word for word, except `paused` and the toss for the
+// first serve: the original said nothing while paused, and served at once.
 const fixed: Record<Exclude<PongMessageKey, 'smack.ai' | 'smack.human'>, MessageCopy> = {
   start: { text: 'Shall we play a game?', hint: 'press enter to start' },
-  paused: { text: 'PAUSED', hint: 'press esc to resume' },
+  toss: { text: 'Who serves first?' },
+  'serve.ai': { text: 'My serve.' },
+  'serve.human': { text: 'Your serve.' },
+  paused: { text: 'PAUSED', hint: 'press space to resume' },
   gameOver: { text: 'GAME OVER', hint: "Well that was fun... don't you have better things to do, human?" },
   reset: { text: 'GAME OVER', hint: 'press esc to reset' },
 };
@@ -44,6 +47,7 @@ const smack: Record<'smack.ai' | 'smack.human', readonly string[]> = {
     'Take your time. I have all the time in the world.',
     'You might want to sit closer to the screen.',
     'Adding that one to my highlight reel.',
+    'A strange game. The only winning move is not to play.',
   ],
   'smack.human': [
     'Pshhh, lucky shot',

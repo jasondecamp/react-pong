@@ -6,7 +6,12 @@ import type { PongDifficulty, PongPhase, PongScores, Side } from './types.js';
 /** Up (`-1`), still (`0`), or down (`1`). */
 export type Direction = -1 | 0 | 1;
 
-export type SimulationEvent = 'wall' | 'paddle' | 'point' | 'gameOver';
+/**
+ * What happened in a step. `toss` is the toss for the first serve settling on
+ * a side, `count` the countdown that follows moving on a number, and `serve`
+ * the ball leaving at the end of it.
+ */
+export type SimulationEvent = 'wall' | 'paddle' | 'point' | 'gameOver' | 'toss' | 'count' | 'serve';
 
 export type Paddle = {
   /** Top edge, px from the top of the court. */
@@ -52,6 +57,8 @@ export type SimulationState = {
   phase: PongPhase;
   /** The side that serves next; `null` picks one at random. */
   server: Side | null;
+  /** The number the countdown to the first serve is on, or `0` when nothing is counting. */
+  countdown: number;
   /** The side that scored the last point. */
   scorer: Side | null;
   winner: Side | null;
@@ -77,7 +84,14 @@ export type Simulation = {
     paddleWidth: number,
     paddleHeight: number,
   ) => void;
+  /** Serve at once, from the start screen or between points. */
   serve: () => void;
+  /**
+   * From the start screen, toss for the first serve: the ball bounces between
+   * the paddles (unless `animate` is false) and comes to rest on the side that
+   * won it, a countdown runs, and the ball is served.
+   */
+  toss: (animate: boolean) => void;
   pause: () => void;
   resume: () => void;
   reset: () => void;
@@ -96,6 +110,14 @@ const degrees = Math.PI / 180;
 const serveSpeed = 0.65;
 const serveSpeedVariation = 0.1;
 const maxServeAngle = 30 * degrees;
+// The toss for the first serve: the ball crosses the court this many times in
+// this many seconds, slowing to a stop on the server's paddle. The half is the
+// run from the middle of the court, where it starts, to the first paddle.
+const tossSpans = 3.5;
+const tossDuration = 1.8;
+// Then a countdown from this number, with this many seconds on each.
+const countFrom = 3;
+const countInterval = 0.6;
 // Each paddle hit returns the ball 5% faster.
 const hitSpeedUp = 1.05;
 // A moving paddle drags the ball with it: this fraction of the paddle's own
@@ -136,6 +158,7 @@ export const createSimulation = (random: () => number): Simulation => {
     scores: { left: 0, right: 0 },
     phase: 'start',
     server: null,
+    countdown: 0,
     scorer: null,
     winner: null,
   };
@@ -146,12 +169,91 @@ export const createSimulation = (random: () => number): Simulation => {
   let aiClock = 0;
   // The ball got past the paddle it was heading for, and is on its way out.
   let missed = false;
+  // Seconds into the toss for the first serve.
+  let tossClock = 0;
 
   /** Off the court, where the start screen keeps the ball. */
   const parkBall = () => {
     state.ball.x = -2 * state.ballWidth;
     state.ball.y = (state.height - state.ballHeight) / 2;
     state.ball.speed = 0;
+  };
+
+  /** How far the tossed ball has travelled `time` seconds in, in crossings of the court: fast at first, still at the end. */
+  const tossTravel = (time: number) => {
+    const left = 1 - Math.min(1, time / tossDuration);
+    return tossSpans * (1 - left * left);
+  };
+
+  /** Put the tossed ball where it is `time` seconds in, level with the paddles it runs between. */
+  const placeTossed = (time: number) => {
+    const { ball } = state;
+    // It sets off away from the server, so that its last crossing brings it back.
+    const from = state.server === 'left' ? 0.5 + tossTravel(time) : 0.5 - tossTravel(time);
+    const folded = ((from % 2) + 2) % 2;
+    // 0 on the left paddle's face, 1 on the right's.
+    const across = folded > 1 ? 2 - folded : folded;
+    const leftFace = state.paddleWidth;
+    const rightFace = state.width - state.paddleWidth - state.ballWidth;
+    const level = state.left.y + (state.right.y - state.left.y) * across;
+    ball.x = leftFace + (rightFace - leftFace) * across;
+    ball.y = clamp(
+      level + (state.paddleHeight - state.ballHeight) / 2,
+      0,
+      Math.max(0, state.height - state.ballHeight),
+    );
+  };
+
+  /** Send the ball off from the face of the server's paddle. */
+  const launch = (server: Side) => {
+    const { ball } = state;
+    ball.x = server === 'left' ? state.paddleWidth : state.width - state.paddleWidth - state.ballWidth;
+    ball.y = clamp(
+      state[server].y + (state.paddleHeight - state.ballHeight) / 2,
+      0,
+      Math.max(0, state.height - state.ballHeight),
+    );
+    ball.speed = state.width * serveSpeed * (1 + (random() * 2 - 1) * serveSpeedVariation);
+    ball.heading = server === 'left' ? 1 : -1;
+    ball.angle = (random() * 2 - 1) * maxServeAngle;
+    state.server = server;
+    state.countdown = 0;
+    state.left.target = server === 'left' ? aiTarget(state, 'left', ai, random) : null;
+    state.left.shot = server === 'left' ? 'center' : aiShot(ai, random);
+    state.phase = 'rally';
+    aiClock = 0;
+    missed = false;
+  };
+
+  // The toss, the countdown, and the serve at the end of it.
+  const stepToss = (dt: number) => {
+    const server = state.server ?? 'left';
+    const before = tossClock;
+    tossClock += dt;
+    // Each time the ball reaches a paddle on the way, it bounces like any other hit.
+    const bounces = Math.floor(tossTravel(tossClock) + 0.5);
+    if (bounces < tossSpans && bounces > Math.floor(tossTravel(before) + 0.5)) {
+      placeTossed(tossClock);
+      const { contact } = state;
+      // The first paddle it meets is the receiver's, and from there they alternate.
+      contact.side = (bounces % 2 === 1) === (server === 'left') ? 'right' : 'left';
+      contact.x = contact.side === 'left' ? state.paddleWidth : state.width - state.paddleWidth;
+      contact.y = state[contact.side].y + state.paddleHeight / 2;
+      events.push('paddle');
+    }
+    const count = countFrom - Math.floor(Math.max(0, tossClock - tossDuration) / countInterval);
+    if (tossClock < tossDuration) {
+      placeTossed(tossClock);
+    } else if (count <= 0) {
+      launch(server);
+      events.push('serve');
+    } else {
+      placeTossed(tossDuration);
+      if (count !== state.countdown) {
+        events.push(state.countdown === 0 ? 'toss' : 'count');
+        state.countdown = count;
+      }
+    }
   };
 
   const steer = (paddle: Paddle, direction: Direction) => {
@@ -363,24 +465,17 @@ export const createSimulation = (random: () => number): Simulation => {
     serve: () => {
       if (state.phase !== 'start' && state.phase !== 'between') return;
       if (state.width <= 0 || state.height <= 0) return;
-      const { ball } = state;
-      const server = state.server ?? (random() < 0.5 ? 'left' : 'right');
-      // From the face of the server's paddle, heading away from it.
-      ball.x = server === 'left' ? state.paddleWidth : state.width - state.paddleWidth - state.ballWidth;
-      ball.y = clamp(
-        state[server].y + (state.paddleHeight - state.ballHeight) / 2,
-        0,
-        Math.max(0, state.height - state.ballHeight),
-      );
-      ball.speed = state.width * serveSpeed * (1 + (random() * 2 - 1) * serveSpeedVariation);
-      ball.heading = server === 'left' ? 1 : -1;
-      ball.angle = (random() * 2 - 1) * maxServeAngle;
-      state.server = server;
-      state.left.target = server === 'left' ? aiTarget(state, 'left', ai, random) : null;
-      state.left.shot = server === 'left' ? 'center' : aiShot(ai, random);
-      state.phase = 'rally';
-      aiClock = 0;
-      missed = false;
+      launch(state.server ?? (random() < 0.5 ? 'left' : 'right'));
+    },
+
+    toss: (animate) => {
+      if (state.phase !== 'start' || state.width <= 0 || state.height <= 0) return;
+      state.server = random() < 0.5 ? 'left' : 'right';
+      state.phase = 'toss';
+      state.countdown = 0;
+      state.ball.speed = 0;
+      tossClock = animate ? 0 : tossDuration;
+      placeTossed(tossClock);
     },
 
     pause: () => {
@@ -396,6 +491,7 @@ export const createSimulation = (random: () => number): Simulation => {
       state.scores.right = 0;
       state.phase = 'start';
       state.server = null;
+      state.countdown = 0;
       state.scorer = null;
       state.winner = null;
       state.left.target = null;
@@ -424,6 +520,7 @@ export const createSimulation = (random: () => number): Simulation => {
       movePaddle(state.left, elapsed, state.phase === 'rally' ? aiDestination(state, 'left', ai) : null);
       movePaddle(state.right, elapsed, null);
       if (state.phase === 'rally') moveBall(elapsed, leftBefore, rightBefore);
+      else if (state.phase === 'toss') stepToss(elapsed);
       return events;
     },
   };

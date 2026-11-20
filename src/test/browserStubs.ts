@@ -1,8 +1,10 @@
 import { vi } from 'vitest';
+import { seededRandom } from './seededRandom.js';
 
 // jsdom has no layout, observers, animation clock worth driving, or Web Audio.
 // These stubs supply just enough of each for createPong, and expose handles to
-// drive them.
+// drive them. They also seed Math.random, which the engine draws its serves,
+// bounces, and AI decisions from, so every run plays the same rallies.
 
 type FrameCallback = (time: number) => void;
 
@@ -54,6 +56,7 @@ export const stubBrowser = ({ width = 800, height = 400 } = {}): BrowserStubs =>
     return sizeOf(this).height;
   });
   vi.spyOn(Document.prototype, 'hidden', 'get').mockImplementation(() => hidden);
+  vi.spyOn(Math, 'random').mockImplementation(seededRandom(1));
 
   vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
     const id = nextId++;

@@ -6,7 +6,7 @@ Retro Pong you can embed: a framework-free Pong engine, plus a composite React c
 
 Play it in the [playground](https://jasondecamp.github.io/react-pong/).
 
-- You play the right paddle against an AI on the left, at three difficulties. First to 11 wins, and whoever scores serves next.
+- You play the right paddle against an AI on the left, at three difficulties. First to 11 wins. A toss decides the first serve, and after that whoever scores serves next.
 - A good guest on the host page: keys are heard only while the court has focus, nothing is global, any number of games can share a page, and unmounting releases everything.
 - Delta-time physics: the same speed at 60Hz and 120Hz, and a fast ball can't tunnel through a paddle.
 - A ball with a speed and an angle: serves leave at a steady pace, each paddle hit adds 5%, a moving paddle drags the ball its own way, and the corners of a paddle send it off steeply, even when the paddle catches the ball with its end after the ball has slipped past its face.
@@ -32,7 +32,7 @@ import { Pong } from 'react-pong';
 import 'react-pong/styles.css';
 
 <div className='arcade'>  {/* give it a size */}
-  <Pong smack />
+  <Pong />
 </div>
 ```
 
@@ -45,8 +45,13 @@ Click the court (or tab to it) to give it the keyboard. Keys the game handles do
 | Key | |
 | --- | --- |
 | Up, Down | Move your paddle. It speeds up the longer you hold. |
-| Enter | Serve. |
-| Esc | Pause and resume. After game over, reset. |
+| Enter | Serve. The first serve of a match is tossed for: the ball bounces between the paddles and settles on the side that won, which is announced with a 3-2-1 countdown before the ball leaves. You can move your paddle while it counts. |
+| Space | Pause and resume. |
+| Esc | After game over, reset. |
+| ? | Show the keys, pausing a rally first. ? or Esc closes them, and the rally stays paused until you resume it with Space. |
+| D | Step the difficulty: easy, normal, hard. Between games only: on the start screen and after game over. |
+
+Just above the score, a small hint points to the help. Between games the current difficulty is shown above it, in its own color.
 
 A rally pauses by itself when the court loses focus, the tab is hidden, or the court scrolls offscreen.
 
@@ -59,6 +64,7 @@ A rally pauses by itself when the court loses focus, the tab is hidden, or the c
   <Pong.Court />
   <Pong.Score />
   <Pong.Message />
+  <Pong.Help />
 </Pong>
 ```
 
@@ -85,17 +91,23 @@ const ServeButton = () => {
 | `<Pong>` | every [option](#options), `className`, `children` | Creates the game and provides it to its parts. Options are live: change a prop and only that option updates. |
 | `<Pong.Court>` | `className`, `aria-label`, `autoFocus` | The focusable playfield with the ball and paddles. `autoFocus` focuses it on mount, for pages the game owns. |
 | `<Pong.Score>` | `className` | The two scores, AI on the left. The winner's scales up. |
-| `<Pong.Message>` | `className` | The start, pause, game over, and smack-talk copy. Smack talk fades after 5 seconds, and no line repeats within a match. For your own copy, replace it with a part of your own. |
+| `<Pong.Message>` | `className` | The start, toss, countdown, pause, game over, and smack-talk copy. Smack talk fades after 5 seconds, and no line repeats within a match. For your own copy, replace it with a part of your own. |
+| `<Pong.Help>` | `className` (on the overlay) | Just above the score, the "press ? for help" hint and, between games, the current difficulty above it, color-coded. Also the overlay the help key opens: every key in the current key map with what it does, including the difficulty key and the note that it doesn't work during a game, headed by the score to play to ("First to 11 wins") and followed by an advanced section ("Momentum" and "Corners") on how a moving paddle and a paddle's corners change the ball's path. A key you leave out of `keys` gets no hint and no row. |
 
-`usePongGame()` returns the state below plus `serve()`, `pause()`, `resume()`, and `reset()`. It re-renders only when the score, phase, or message changes, never per frame.
+`usePongGame()` returns the state below plus `serve()`, `pause()`, `resume()`, `reset()`, `openHelp()`, and `closeHelp()`. It re-renders only when something in the state changes, never per frame.
 
 | State | |
 | --- | --- |
-| `phase` | `'start'`, `'rally'`, `'paused'`, `'between'` (a point was scored; waiting for a serve), or `'gameOver'`. |
+| `phase` | `'start'`, `'toss'` (the first serve is being tossed for and counted down to), `'rally'`, `'paused'`, `'between'` (a point was scored; waiting for a serve), or `'gameOver'`. |
 | `scores` | `{ left, right }`. |
 | `winner` | `'left'`, `'right'`, or `null` until the game is over. |
-| `message` | A key, not text: `'start'`, `'smack.ai'` (the AI scored), `'smack.human'`, `'paused'`, `'gameOver'`, `'reset'` (Enter was pressed after game over), or `null`. |
+| `message` | A key, not text: `'start'`, `'toss'`, `'serve.ai'` and `'serve.human'` (who won the toss, while `countdown` runs), `'smack.ai'` (the AI scored), `'smack.human'`, `'paused'`, `'gameOver'`, `'reset'` (Enter was pressed after game over), or `null`. |
+| `countdown` | The number the countdown to the first serve is on, 3 to 1, or `null`. |
 | `messageCount` | How many messages with this key came earlier in this match. |
+| `difficulty` | The AI's difficulty right now: the `difficulty` option, until the difficulty key changes it. |
+| `winningScore` | Points needed to win: the `winningScore` option with its default filled in. |
+| `help` | Whether the help is open. Never during a rally. |
+| `keys` | The key map in use: the `keys` option with its default filled in. |
 | `matchRoll` | A random number in [0, 1) drawn at the start of each match. With `messageCount`, it lets your own copy be dealt from a deck shuffled once per match. |
 
 `<Pong>` renders the start screen on the server and starts the game in an effect.
@@ -113,7 +125,7 @@ const pong = createPong({
   rightPaddle: document.querySelector('.pong-paddle-right'),
   leftRipple: document.querySelector('.pong-ripple-left'),
   rightRipple: document.querySelector('.pong-ripple-right'),
-}, { smack: true });
+}, { difficulty: 'hard' });
 
 pong.subscribe(() => console.log(pong.getState().scores));
 ```
@@ -134,16 +146,17 @@ pong.subscribe(() => console.log(pong.getState().scores));
 
 The two ripple elements are optional: leave them out and the game plays without the rings.
 
-The score and message are yours to render from `getState()`.
+The score, message, and help are yours to render from `getState()`: the engine handles the help and difficulty keys and reports `help`, `difficulty`, `winningScore`, and `keys` in the state.
 
 | Method | |
 | --- | --- |
-| `serve()` | Serve, from the start screen or between points. |
+| `serve()` | Serve, from the start screen or between points. With `toss`, the first serve of a match follows the toss and countdown. |
 | `pause()` / `resume()` | Freeze and continue a rally. |
 | `reset()` | Back to the start screen with the scores cleared. |
+| `openHelp()` / `closeHelp()` | Open the help, pausing a rally first, and close it. While it is open, only the help and reset keys do anything, and both close it. Serving, resuming, or resetting from code closes it too. |
 | `update(options)` | Merge new options; `undefined` restores a default. |
 | `getState()` | The current state. The same object until something in it changes. |
-| `subscribe(listener)` | Called when the score, phase, or message changes. Returns the unsubscribe function. Shaped for `useSyncExternalStore`. |
+| `subscribe(listener)` | Called when the state changes: the score, phase, message, difficulty, winning score, help, or keys. Returns the unsubscribe function. Shaped for `useSyncExternalStore`. |
 | `destroy()` | Stop the loop and release every listener, observer, and the audio context. |
 
 ## Options
@@ -151,18 +164,20 @@ The score and message are yours to render from `getState()`.
 | Option | Default | |
 | --- | --- | --- |
 | `winningScore` | `11` | Points needed to win. No win-by-two. |
-| `difficulty` | `'normal'` | How early the AI reacts to a ball coming at it, and where it waits after sending the ball away. `'easy'`: the third of the court nearest its paddle; waits level with where its shot will reach you. `'normal'`: its own half; waits somewhere at random. `'hard'`: the two thirds nearest its paddle; waits where a plain return will come back to. At every level it often swings through the ball to bend its path, and now and then goes for a corner. |
-| `smack` | `false` | Smack talk after about half the points. No line is repeated within a match. |
+| `difficulty` | `'normal'` | How early the AI reacts to a ball coming at it, and where it waits after sending the ball away. `'easy'`: the third of the court nearest its paddle; waits level with where its shot will reach you. `'normal'`: its own half; waits somewhere at random. `'hard'`: the two thirds nearest its paddle; waits where a plain return will come back to. The difficulty key steps through them between games. At every level it often swings through the ball to bend its path, and now and then goes for a corner. |
+| `smack` | `true` | Smack talk after about half the points, in the AI paddle's color. No line is repeated within a match. |
 | `sound` | `true` | The wall, paddle, and point blips. Browsers allow audio only after a key press, so the first one starts it. |
 | `ripple` | `true` | Rings that ripple out from the spot where the ball meets a paddle. Off under `prefers-reduced-motion`. |
-| `keys` | arrows, Enter, Esc | `KeyboardEvent.key` values mapped to `'up'`, `'down'`, `'serve'`, or `'pause'`. Replaces the whole map: `{ w: 'up', s: 'down', Enter: 'serve', Escape: 'pause' }`. |
+| `toss` | `true` | Open each match with a toss for the first serve and a 3-2-1 countdown, about 3.6 seconds in all. Under `prefers-reduced-motion` the bouncing is skipped and only the announcement and countdown remain. `false` serves at once. Losing focus, hiding the tab, scrolling offscreen, or opening the help during it returns to the start screen. |
+| `keys` | arrows, Enter, Space, Esc, ?, d | `KeyboardEvent.key` values mapped to `'up'`, `'down'`, `'serve'`, `'pause'`, `'reset'`, `'help'`, or `'difficulty'`. Replaces the whole map, so list every key you want: `{ w: 'up', s: 'down', Enter: 'serve', ' ': 'pause', Escape: 'reset', '?': 'help' }` has no difficulty key. |
 | `paddleSpeed` | `1.2` | Starting paddle speed, in court heights per second, so it feels the same on any court. A paddle eases in to this speed over its first 0.08s rather than jumping to it, and a held one goes on speeding up to three times this over two seconds, and the faster it is moving when it meets the ball, the more it bends the ball's path. |
 | `onPoint` | | Called with `{ scorer, scores }` after every point. |
 | `onGameOver` | | Called with `{ winner, scores }` when a side wins. |
+| `onDifficultyChange` | | Called with the new difficulty when the difficulty key changes it. If you pass `difficulty` from your own state, set it here so the two agree. |
 
 ## Theme
 
-Every color and size is a custom property with the original's value as its default. Set them on the root, through `<Pong>`'s `className`:
+Every color and size is a custom property. Set them on the root, through `<Pong>`'s `className`:
 
 ```css
 .night {
@@ -174,8 +189,10 @@ Every color and size is a custom property with the original's value as its defau
 
 | Property | Default | |
 | --- | --- | --- |
-| `--pong-color` | `#007ee5` | Ball, paddles, and the winning score. |
-| `--pong-ball-color`, `--pong-paddle-left-color`, `--pong-paddle-right-color` | `--pong-color` | The ball and each paddle on their own. |
+| `--pong-color` | `#007ee5` | Your paddle, the winning score, and the base of the message and help colors. |
+| `--pong-ball-color` | `#000` | The ball. |
+| `--pong-paddle-left-color`, `--pong-paddle-right-color` | `#a61c28`, `--pong-color` | The AI's paddle, a dark maroon, and yours. |
+| `--pong-smack-color` | `--pong-paddle-left-color` | Smack talk, which is the AI speaking. |
 | `--pong-ripple-left-color`, `--pong-ripple-right-color` | that paddle's color | The rings where the ball meets each paddle. |
 | `--pong-ripple-size`, `--pong-ripple-width`, `--pong-ripple-duration` | `240px`, `2px`, `0.6s` | How wide the rings grow, how thick they are, and how long each takes. |
 | `--pong-muted` | `#ccc` | Score and hint text. |
@@ -187,9 +204,12 @@ Every color and size is a custom property with the original's value as its defau
 | `--pong-paddle-width` | `15px` | |
 | `--pong-paddle-height` | `15%` | A length, or a percentage of the court height. |
 | `--pong-score-size` | `50px` | |
-| `--pong-message-size`, `--pong-hint-size` | `30px`, `12px` | |
+| `--pong-message-size`, `--pong-hint-size` | `52px`, `12px` | |
+| `--pong-difficulty-easy-color`, `--pong-difficulty-normal-color`, `--pong-difficulty-hard-color` | `#2a9d5c`, `#d9900a`, `#e0452c` | The difficulty shown above the score between games. |
+| `--pong-help-background` | `#fff` | What the help covers the court with. Set the background to match a page that isn't white. |
+| `--pong-help-color`, `--pong-help-size`, `--pong-help-font-weight` | `--pong-color` at 80%, `18px`, `400` | The help's text. It is heavier than the game's so that small type stays readable; if you load your own font, load this weight too. |
 
-The message fade and the winner's scale-up are disabled under `prefers-reduced-motion`.
+The message fade, the help's fade, and the winner's scale-up are disabled under `prefers-reduced-motion`.
 
 ## Development
 

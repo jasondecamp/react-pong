@@ -41,9 +41,12 @@ const play = (pong: PongInstance, maxFrames = 2000) => {
   for (let frame = 0; frame < maxFrames && pong.getState().phase === phase; frame++) browser.frame();
 };
 
-/** A game the AI can't lose a point in quickly: the human paddle never moves. */
+/**
+ * A game the AI can't lose a point in quickly: the human paddle never moves.
+ * It serves at once unless a test asks for the toss.
+ */
 const start = (options: PongOptions = {}) => {
-  const pong = createPong(elements, options);
+  const pong = createPong(elements, { toss: false, ...options });
   elements.court.focus();
   return pong;
 };
@@ -99,14 +102,16 @@ describe('createPong', () => {
       expect(browser.pendingFrames()).toBe(1);
     });
 
-    it('pauses and resumes on Escape, idling while paused', () => {
+    it('pauses and resumes on Space, idling while paused', () => {
       const pong = start();
       press('Enter');
       press('Escape');
+      expect(pong.getState().phase).toBe('rally');
+      press(' ');
       expect(pong.getState().phase).toBe('paused');
       expect(pong.getState().message).toBe('paused');
       expect(browser.pendingFrames()).toBe(0);
-      press('Escape');
+      press(' ');
       expect(pong.getState().phase).toBe('rally');
       expect(pong.getState().message).toBeNull();
       expect(browser.pendingFrames()).toBe(1);
@@ -162,10 +167,219 @@ describe('createPong', () => {
     });
   });
 
+  describe('help', () => {
+    it('opens on ? and closes on ? or Escape, leaving the start screen as it was', () => {
+      const pong = start();
+      expect(pong.getState().help).toBe(false);
+      expect(press('?').defaultPrevented).toBe(true);
+      expect(pong.getState()).toMatchObject({ help: true, phase: 'start', message: 'start' });
+      press('?');
+      expect(pong.getState().help).toBe(false);
+      press('?');
+      press('Escape');
+      expect(pong.getState()).toMatchObject({ help: false, phase: 'start', message: 'start' });
+    });
+
+    it('pauses a rally, which stays paused once the help is closed', () => {
+      const pong = start();
+      press('Enter');
+      press('?');
+      expect(pong.getState()).toMatchObject({ help: true, phase: 'paused', message: 'paused' });
+      expect(browser.pendingFrames()).toBe(0);
+      press('Escape');
+      expect(pong.getState()).toMatchObject({ help: false, phase: 'paused', message: 'paused' });
+      press(' ');
+      expect(pong.getState().phase).toBe('rally');
+    });
+
+    it('keeps the other keys from doing anything while open', () => {
+      const pong = start();
+      press('?');
+      expect(press('Enter').defaultPrevented).toBe(true);
+      press(' ');
+      expect(pong.getState()).toMatchObject({ help: true, phase: 'start' });
+      press('d');
+      expect(pong.getState().difficulty).toBe('normal');
+      key(elements.court, 'keydown', 'ArrowDown');
+      expect(browser.pendingFrames()).toBe(0);
+    });
+
+    it('lets go of a held paddle when it opens', () => {
+      start();
+      key(elements.court, 'keydown', 'ArrowDown');
+      press('?');
+      browser.frame();
+      expect(browser.pendingFrames()).toBe(0);
+    });
+
+    it('opens and closes from the controls, and closes when play goes on', () => {
+      const pong = start();
+      pong.openHelp();
+      expect(pong.getState().help).toBe(true);
+      pong.closeHelp();
+      expect(pong.getState().help).toBe(false);
+      pong.openHelp();
+      pong.serve();
+      expect(pong.getState()).toMatchObject({ help: false, phase: 'rally' });
+    });
+
+    it('follows a remapped help key', () => {
+      const pong = start({ keys: { h: 'help' } });
+      press('?');
+      expect(pong.getState().help).toBe(false);
+      press('h');
+      expect(pong.getState().help).toBe(true);
+    });
+  });
+
+  describe('toss', () => {
+    /** Run frames until the message or the countdown changes. */
+    const until = (pong: PongInstance, maxFrames = 600) => {
+      const { message, countdown } = pong.getState();
+      for (let frame = 0; frame < maxFrames; frame++) {
+        browser.frame();
+        const state = pong.getState();
+        if (state.message !== message || state.countdown !== countdown) return;
+      }
+    };
+
+    it('opens a match by tossing for the serve, announcing it, and counting down', () => {
+      const pong = start({ toss: true });
+      press('Enter');
+      expect(pong.getState()).toMatchObject({ phase: 'toss', message: 'toss', countdown: null });
+      expect(browser.pendingFrames()).toBe(1);
+      expect(elements.ball.style.transform).toBe('translate(392.5px, 192.5px)');
+
+      until(pong);
+      const { message } = pong.getState();
+      expect(['serve.ai', 'serve.human']).toContain(message);
+      expect(pong.getState()).toMatchObject({ phase: 'toss', countdown: 3 });
+      // Resting on the face of the paddle that serves.
+      const x = message === 'serve.ai' ? 15 : 770;
+      expect(elements.ball.style.transform).toBe(`translate(${x}px, 192.5px)`);
+
+      until(pong);
+      expect(pong.getState()).toMatchObject({ message, countdown: 2 });
+      until(pong);
+      expect(pong.getState()).toMatchObject({ message, countdown: 1 });
+      until(pong);
+      expect(pong.getState()).toMatchObject({ phase: 'rally', message: null, countdown: null });
+      expect(browser.pendingFrames()).toBe(1);
+    });
+
+    it('blips for each bounce of the toss and each count', () => {
+      const pong = start({ toss: true });
+      press('Enter');
+      play(pong);
+      const frequencies = browser.audioContexts[0]?.oscillators.map(({ frequency }) => frequency);
+      expect(frequencies).toEqual([459, 459, 459, 226, 226, 226]);
+    });
+
+    it('ignores the game keys until the ball is served', () => {
+      const pong = start({ toss: true });
+      press('Enter');
+      press('Enter');
+      press(' ');
+      press('Escape');
+      press('d');
+      expect(pong.getState()).toMatchObject({ phase: 'toss', difficulty: 'normal' });
+    });
+
+    it('is called off when the court loses focus, the tab is hidden, or the help opens', () => {
+      const pong = start({ toss: true });
+      press('Enter');
+      elements.court.blur();
+      expect(pong.getState()).toMatchObject({ phase: 'start', message: 'start' });
+      // The frame already scheduled finds nothing moving, and the loop idles.
+      browser.frame();
+      expect(browser.pendingFrames()).toBe(0);
+      expect(elements.ball.style.transform).toBe('translate(-30px, 192.5px)');
+
+      elements.court.focus();
+      press('Enter');
+      browser.setHidden(true);
+      expect(pong.getState().phase).toBe('start');
+      browser.setHidden(false);
+
+      press('Enter');
+      press('?');
+      expect(pong.getState()).toMatchObject({ phase: 'start', help: true });
+    });
+
+    it('happens once a match: later serves leave at once, and a new match tosses again', () => {
+      const pong = start({ toss: true, winningScore: 2 });
+      press('Enter');
+      play(pong);
+      play(pong);
+      expect(pong.getState().phase).toBe('between');
+      press('Enter');
+      expect(pong.getState().phase).toBe('rally');
+      pong.reset();
+      press('Enter');
+      expect(pong.getState().phase).toBe('toss');
+    });
+
+    it('skips the bouncing under reduced motion', () => {
+      vi.stubGlobal('matchMedia', () => ({ matches: true }));
+      const pong = start({ toss: true });
+      press('Enter');
+      browser.frame();
+      browser.frame();
+      expect(pong.getState()).toMatchObject({ phase: 'toss', countdown: 3 });
+    });
+  });
+
+  describe('difficulty', () => {
+    it('steps through the difficulties on d, reporting each change', () => {
+      const onDifficultyChange = vi.fn();
+      const pong = start({ onDifficultyChange });
+      expect(pong.getState().difficulty).toBe('normal');
+      expect(press('d').defaultPrevented).toBe(true);
+      expect(pong.getState().difficulty).toBe('hard');
+      press('d');
+      expect(pong.getState().difficulty).toBe('easy');
+      press('d');
+      expect(pong.getState().difficulty).toBe('normal');
+      expect(onDifficultyChange.mock.calls).toEqual([['hard'], ['easy'], ['normal']]);
+    });
+
+    it('stays put during a game: in a rally, while paused, and between points', () => {
+      const onDifficultyChange = vi.fn();
+      const pong = start({ onDifficultyChange });
+      press('Enter');
+      press('d');
+      press(' ');
+      press('d');
+      press(' ');
+      play(pong);
+      expect(pong.getState().phase).toBe('between');
+      press('d');
+      expect(pong.getState().difficulty).toBe('normal');
+      expect(onDifficultyChange).not.toHaveBeenCalled();
+    });
+
+    it('can change again once the game is over', () => {
+      const pong = start({ winningScore: 1 });
+      press('Enter');
+      play(pong);
+      expect(pong.getState().phase).toBe('gameOver');
+      press('d');
+      expect(pong.getState()).toMatchObject({ difficulty: 'hard', phase: 'gameOver', message: 'gameOver' });
+    });
+
+    it('follows the option, at any time', () => {
+      const pong = start({ difficulty: 'easy' });
+      expect(pong.getState().difficulty).toBe('easy');
+      press('Enter');
+      pong.update({ difficulty: 'hard' });
+      expect(pong.getState().difficulty).toBe('hard');
+    });
+  });
+
   describe('points', () => {
     it('scores, reports the point, and idles until the next serve', () => {
       const onPoint = vi.fn();
-      const pong = start({ onPoint });
+      const pong = start({ onPoint, smack: false });
       press('Enter');
       play(pong);
       const state = pong.getState();
@@ -229,6 +443,8 @@ describe('createPong', () => {
       press('Enter');
       expect(pong.getState().phase).toBe('gameOver');
       expect(pong.getState().message).toBe('reset');
+      press(' ');
+      expect(pong.getState().phase).toBe('gameOver');
 
       press('Escape');
       expect(pong.getState()).toMatchObject({ phase: 'start', scores: { left: 0, right: 0 }, message: 'start' });
@@ -256,6 +472,21 @@ describe('createPong', () => {
       browser.frame();
       expect(listener).toHaveBeenCalledTimes(1);
       expect(pong.getState()).toBe(state);
+    });
+
+    it('notifies when the keys change, and not for options the snapshot leaves out', () => {
+      const pong = start();
+      const listener = vi.fn();
+      pong.subscribe(listener);
+      pong.update({ smack: true, keys: { ...pong.getState().keys } });
+      expect(listener).not.toHaveBeenCalled();
+      pong.update({ keys: { w: 'up' } });
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect(pong.getState().keys).toEqual({ w: 'up' });
+      expect(pong.getState().winningScore).toBe(11);
+      pong.update({ winningScore: 3 });
+      expect(listener).toHaveBeenCalledTimes(2);
+      expect(pong.getState().winningScore).toBe(3);
     });
 
     it('stops notifying once unsubscribed', () => {
@@ -311,7 +542,7 @@ describe('createPong', () => {
     it('keeps two courts apart', () => {
       const first = start();
       const otherElements = createElements();
-      const second = createPong(otherElements);
+      const second = createPong(otherElements, { toss: false });
       otherElements.court.focus();
       key(otherElements.court, 'keydown', 'Enter');
       expect(second.getState().phase).toBe('rally');

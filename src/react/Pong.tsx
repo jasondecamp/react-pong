@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { PongOptions } from '../core/types.js';
 import { Court } from './Court.js';
+import { Help } from './Help.js';
 import { Message } from './Message.js';
 import { PongContext } from './PongContext.js';
 import { createPongStore } from './pongStore.js';
@@ -11,7 +12,7 @@ import { Score } from './Score.js';
 export type PongProps = PongOptions & {
   /** Added to the root element, which is where to set the `--pong-*` custom properties. */
   className?: string;
-  /** The arrangement. Default: `<Pong.Court />`, `<Pong.Score />`, and `<Pong.Message />`. */
+  /** The arrangement. Default: `<Pong.Court />`, `<Pong.Score />`, `<Pong.Message />`, and `<Pong.Help />`. */
   children?: ReactNode;
 };
 
@@ -24,6 +25,7 @@ export type PongProps = PongOptions & {
  *     <Pong.Court />
  *     <Pong.Score />
  *     <Pong.Message />
+ *     <Pong.Help />
  *   </Pong>
  */
 export const Pong = ({ className, children, ...options }: PongProps) => {
@@ -41,6 +43,7 @@ export const Pong = ({ className, children, ...options }: PongProps) => {
             <Court />
             <Score />
             <Message />
+            <Help />
           </>
         )}
       </div>
@@ -51,3 +54,4 @@ export const Pong = ({ className, children, ...options }: PongProps) => {
 Pong.Court = Court;
 Pong.Score = Score;
 Pong.Message = Message;
+Pong.Help = Help;

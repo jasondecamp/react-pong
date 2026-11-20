@@ -4,15 +4,19 @@ export const defaultKeys: PongKeys = {
   ArrowUp: 'up',
   ArrowDown: 'down',
   Enter: 'serve',
-  Escape: 'pause',
+  ' ': 'pause',
+  Escape: 'reset',
+  '?': 'help',
+  d: 'difficulty',
 };
 
 export const defaultOptions: ResolvedPongOptions = {
   winningScore: 11,
   difficulty: 'normal',
-  smack: false,
+  smack: true,
   sound: true,
   ripple: true,
+  toss: true,
   keys: defaultKeys,
   paddleSpeed: 1.2,
 };
@@ -25,10 +29,16 @@ export const initialState: PongState = {
   message: 'start',
   messageCount: 0,
   matchRoll: 0,
+  countdown: null,
+  difficulty: defaultOptions.difficulty,
+  winningScore: defaultOptions.winningScore,
+  help: false,
+  keys: defaultKeys,
 };
 
-const actions: readonly PongAction[] = ['up', 'down', 'serve', 'pause'];
-const difficulties: readonly PongDifficulty[] = ['easy', 'normal', 'hard'];
+const actions: readonly PongAction[] = ['up', 'down', 'serve', 'pause', 'reset', 'help', 'difficulty'];
+/** Every difficulty, in the order the difficulty key steps through them. */
+export const difficulties: readonly PongDifficulty[] = ['easy', 'normal', 'hard'];
 
 const finiteOr = (value: number, fallback: number) => (Number.isFinite(value) ? value : fallback);
 
@@ -53,6 +63,7 @@ export const resolveOptions = (options: PongOptions): ResolvedPongOptions => {
     smack: merged.smack === true,
     sound: merged.sound === true,
     ripple: merged.ripple === true,
+    toss: merged.toss === true,
     keys: resolveKeys(merged.keys),
     paddleSpeed: Math.max(0, finiteOr(merged.paddleSpeed, defaultOptions.paddleSpeed)),
   };

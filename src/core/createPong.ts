@@ -1,10 +1,11 @@
-import { initialState, resolveOptions } from './options.js';
+import { difficulties, initialState, resolveOptions } from './options.js';
 import { createSimulation } from './simulation.js';
 import type { Direction } from './simulation.js';
 import { createSound } from './sound.js';
 import type {
   PongElements,
   PongInstance,
+  PongKeys,
   PongMessageKey,
   PongOptions,
   PongState,
@@ -18,6 +19,11 @@ const smackChance = 0.5;
 
 // On a ripple element, the class that runs its rings.
 const rippleClass = 'pong-ripple-active';
+
+const sameKeys = (a: PongKeys, b: PongKeys) => {
+  const names = Object.keys(a);
+  return names.length === Object.keys(b).length && names.every((name) => a[name] === b[name]);
+};
 
 /**
  * Run a game of Pong on existing elements. The court is measured with a
@@ -44,7 +50,15 @@ export const createPong = (elements: PongElements, initialOptions: PongOptions =
   let matchRoll = Math.random();
   let aiRemarks = 0;
   let humanRemarks = 0;
-  let state: PongState = { ...initialState, matchRoll };
+  // Whether the help is open. It never is during a rally.
+  let help = false;
+  let state: PongState = {
+    ...initialState,
+    matchRoll,
+    difficulty: options.difficulty,
+    winningScore: options.winningScore,
+    keys: options.keys,
+  };
   const listeners = new Set<() => void>();
 
   const simulation = createSimulation(Math.random);
@@ -53,8 +67,21 @@ export const createPong = (elements: PongElements, initialOptions: PongOptions =
 
   /** Replace the snapshot from the simulation and tell the subscribers. */
   const publish = (message: PongMessageKey | null, messageCount = 0) => {
-    const { phase, scores, winner } = simulation.state;
-    state = { phase, scores: { ...scores }, winner, message, messageCount, matchRoll };
+    const { phase, scores, winner, countdown } = simulation.state;
+    const { difficulty, winningScore, keys } = options;
+    state = {
+      phase,
+      scores: { ...scores },
+      winner,
+      message,
+      messageCount,
+      matchRoll,
+      countdown: countdown > 0 ? countdown : null,
+      difficulty,
+      winningScore,
+      help,
+      keys,
+    };
     listeners.forEach((listener) => listener());
   };
 
@@ -83,12 +110,12 @@ export const createPong = (elements: PongElements, initialOptions: PongOptions =
     element.classList.add(rippleClass);
   };
 
-  // The loop runs during a rally, and otherwise only while a paddle key is
-  // held: the paddle moves between points too, as in the original.
+  // The loop runs during a rally and the toss before it, and otherwise only
+  // while a paddle key is held: the paddle moves between points too, as in the original.
   const shouldRun = () => {
     const { phase, width, height } = simulation.state;
     if (destroyed || !visible || width <= 0 || height <= 0) return false;
-    return phase === 'rally' || (phase !== 'paused' && inputDirection() !== 0);
+    return phase === 'rally' || phase === 'toss' || (phase !== 'paused' && inputDirection() !== 0);
   };
 
   const tick = (time: number) => {
@@ -103,6 +130,12 @@ export const createPong = (elements: PongElements, initialOptions: PongOptions =
         if (event === 'paddle' && options.ripple) ripple();
       } else if (event === 'point') {
         scored();
+      } else if (event === 'toss' || event === 'count') {
+        // The toss has settled on a server, or the countdown has moved on a number.
+        if (options.sound) sound.play('wall');
+        publish(simulation.state.server === 'left' ? 'serve.ai' : 'serve.human');
+      } else if (event === 'serve') {
+        publish(null);
       }
     }
     render();
@@ -133,10 +166,24 @@ export const createPong = (elements: PongElements, initialOptions: PongOptions =
     frame = view?.requestAnimationFrame(tick) ?? null;
   };
 
+  const reducedMotion = () => view?.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
+
   const serve = () => {
     if (destroyed) return;
+    if (options.toss && simulation.state.phase === 'start') {
+      // A match opens with a toss for the first serve; the ball follows by itself.
+      // An unmeasured court has nowhere to toss the ball.
+      if (simulation.state.width <= 0 || simulation.state.height <= 0) return;
+      simulation.toss(!reducedMotion());
+      help = false;
+      publish('toss');
+      render();
+      wake();
+      return;
+    }
     simulation.serve();
     if (simulation.state.phase !== 'rally' || state.phase === 'rally') return;
+    help = false;
     publish(null);
     render();
     wake();
@@ -152,6 +199,7 @@ export const createPong = (elements: PongElements, initialOptions: PongOptions =
   const resume = () => {
     if (destroyed || simulation.state.phase !== 'paused') return;
     simulation.resume();
+    help = false;
     publish(null);
     wake();
   };
@@ -162,6 +210,7 @@ export const createPong = (elements: PongElements, initialOptions: PongOptions =
     matchRoll = Math.random();
     aiRemarks = 0;
     humanRemarks = 0;
+    help = false;
     publish('start');
     render();
     wake();
@@ -170,6 +219,52 @@ export const createPong = (elements: PongElements, initialOptions: PongOptions =
   const releaseKeys = () => {
     upHeld = false;
     downHeld = false;
+  };
+
+  const update = (nextOptions: PongOptions) => {
+    if (destroyed) return;
+    const previousKeys = options.keys;
+    rawOptions = { ...rawOptions, ...nextOptions };
+    options = resolveOptions(rawOptions);
+    simulation.setOptions(options);
+    // The snapshot carries the keys, the difficulty, and the winning score, so it changes only when they do.
+    const keysChanged = !sameKeys(previousKeys, options.keys);
+    if (!keysChanged) options.keys = previousKeys;
+    if (keysChanged || options.difficulty !== state.difficulty || options.winningScore !== state.winningScore) {
+      publish(state.message, state.messageCount);
+    }
+  };
+
+  // The difficulty is the player's to change between games, never during one.
+  const stepDifficulty = () => {
+    const { phase } = simulation.state;
+    if (phase !== 'start' && phase !== 'gameOver') return;
+    const index = difficulties.indexOf(options.difficulty);
+    const difficulty = difficulties[(index + 1) % difficulties.length] ?? options.difficulty;
+    update({ difficulty });
+    options.onDifficultyChange?.(difficulty);
+  };
+
+  /** Stop play for a court that can't be played on: freeze a rally, and call off a toss. */
+  const standDown = () => {
+    if (simulation.state.phase === 'toss') reset();
+    else pause();
+  };
+
+  const openHelp = () => {
+    if (destroyed || help) return;
+    releaseKeys();
+    // A toss is called off; a rally is paused under the help.
+    if (simulation.state.phase === 'toss') reset();
+    help = true;
+    if (simulation.state.phase === 'rally') pause();
+    else publish(state.message, state.messageCount);
+  };
+
+  const closeHelp = () => {
+    if (destroyed || !help) return;
+    help = false;
+    publish(state.message, state.messageCount);
   };
 
   // Keys with a modifier are the browser's or the host page's shortcuts.
@@ -183,6 +278,11 @@ export const createPong = (elements: PongElements, initialOptions: PongOptions =
     event.preventDefault();
     // A key press is the gesture browsers require before any audio.
     if (options.sound) sound.unlock();
+    if (help) {
+      // Under the help, only the keys that close it do anything.
+      if (!event.repeat && (action === 'help' || action === 'reset')) closeHelp();
+      return;
+    }
     if (action === 'up') {
       upHeld = true;
       latest = -1;
@@ -191,12 +291,17 @@ export const createPong = (elements: PongElements, initialOptions: PongOptions =
       latest = 1;
     } else if (event.repeat) {
       return;
+    } else if (action === 'help') {
+      openHelp();
+    } else if (action === 'difficulty') {
+      stepDifficulty();
     } else if (action === 'serve') {
       // After the game has ended, serving only says how to start another.
       if (simulation.state.phase === 'gameOver') publish('reset');
       else serve();
-    } else if (simulation.state.phase === 'gameOver') {
-      reset();
+    } else if (action === 'reset') {
+      // Only a finished game can be reset from the keyboard, as in the original.
+      if (simulation.state.phase === 'gameOver') reset();
     } else if (simulation.state.phase === 'paused') {
       resume();
     } else {
@@ -215,13 +320,13 @@ export const createPong = (elements: PongElements, initialOptions: PongOptions =
   // No keyup arrives once focus is gone, so let go of the paddle too.
   const onBlur = () => {
     releaseKeys();
-    pause();
+    standDown();
   };
 
   const onVisibilityChange = () => {
     if (court.ownerDocument.hidden) {
       releaseKeys();
-      pause();
+      standDown();
     }
   };
 
@@ -252,7 +357,7 @@ export const createPong = (elements: PongElements, initialOptions: PongOptions =
       if (visible) {
         wake();
       } else {
-        pause();
+        standDown();
         stopLoop();
       }
     });
@@ -270,12 +375,9 @@ export const createPong = (elements: PongElements, initialOptions: PongOptions =
     pause,
     resume,
     reset,
-    update: (nextOptions) => {
-      if (destroyed) return;
-      rawOptions = { ...rawOptions, ...nextOptions };
-      options = resolveOptions(rawOptions);
-      simulation.setOptions(options);
-    },
+    openHelp,
+    closeHelp,
+    update,
     getState: () => state,
     subscribe: (listener) => {
       listeners.add(listener);
