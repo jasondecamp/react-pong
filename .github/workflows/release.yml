@@ -1,0 +1,97 @@
+name: Release
+
+# On every push to main, release package.json's version if it has no tag yet:
+# check, build, commit dist/ in a release-only commit on top of main (never
+# pushed to main itself), tag it v<version>, and create a GitHub Release.
+# Merges without a version bump find the tag already there and stop. Each
+# release also publishes the playground to GitHub Pages. That has to happen
+# here: a separate workflow listening for releases would never fire, because
+# releases created with GITHUB_TOKEN don't trigger workflows.
+on:
+  push:
+    branches: [main]
+
+# One release at a time, never interrupted partway.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    outputs:
+      released: ${{ steps.version.outputs.exists == 'false' }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Find the version
+        id: version
+        run: |
+          tag="v$(node -p "require('./package.json').version")"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          if git rev-parse --verify --quiet "refs/tags/$tag" > /dev/null; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "$tag is already released."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.version.outputs.exists == 'false'
+        uses: pnpm/action-setup@v6
+      - if: steps.version.outputs.exists == 'false'
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - if: steps.version.outputs.exists == 'false'
+        run: pnpm install --frozen-lockfile
+      - if: steps.version.outputs.exists == 'false'
+        run: pnpm lint && pnpm typecheck && pnpm test && pnpm build
+      - name: Tag the release
+        if: steps.version.outputs.exists == 'false'
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add --force dist
+          git commit --message "Release $TAG"
+          git tag "$TAG"
+          git push origin "$TAG"
+      - name: Create the GitHub Release
+        if: steps.version.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: gh release create "$TAG" --verify-tag --generate-notes --title "$TAG"
+
+  # The playground at https://jasondecamp.github.io/react-pong/, built from the
+  # released source under the Pages base path.
+  pages:
+    needs: release
+    if: needs.release.outputs.released == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build:demo --base /react-pong/
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: demo/dist
+      - id: deploy
+        uses: actions/deploy-pages@v5

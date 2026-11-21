@@ -1,0 +1,21 @@
+@use '../../styles/tokens' as *;
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: $space-s;
+  // A fieldset is at least as wide as its content by default, which would
+  // push wide rows past the panel instead of letting them shrink.
+  min-width: 0;
+  margin: 0;
+  padding: $space-s $space-m $space-m;
+  border: 1px solid $color-panel-border;
+  border-radius: $radius;
+}
+
+.title {
+  padding: 0 $space-xs;
+  font-size: $font-size-s;
+  font-weight: 600;
+  color: $color-text-muted;
+}

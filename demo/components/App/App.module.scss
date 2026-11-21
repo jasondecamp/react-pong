@@ -1,0 +1,108 @@
+@use '../../styles/tokens' as *;
+
+.scene {
+  display: flex;
+  height: 100%;
+
+  @media (max-width: 640px) {
+    flex-direction: column;
+  }
+}
+
+// The game fills whatever the panel leaves, inside the court's walls: the
+// stage's padding, showing its background.
+.stage {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  padding: $wall-width;
+  background: $color-wall;
+}
+
+.game {
+  font-family: $font-game;
+  background: $color-page;
+  border: $court-border-width solid $color-court-border;
+  // The court owns this page and its border already marks it out, so the
+  // package's focus outline, drawn just inside the court's edge and over the
+  // paddles, is turned off here.
+  --pong-focus-color: transparent;
+}
+
+.panel {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: $space-m;
+  width: $panel-width;
+  padding: $space-m;
+  overflow-y: auto;
+  background: $color-panel;
+  border-left: 1px solid $color-panel-border;
+
+  @media (max-width: 640px) {
+    width: auto;
+    max-height: 50%;
+    border-top: 1px solid $color-panel-border;
+    border-left: none;
+  }
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $space-s;
+}
+
+.title {
+  margin: 0;
+  font-size: $font-size-l;
+}
+
+.help {
+  margin: 0;
+  font-size: $font-size-s;
+  color: $color-text-muted;
+}
+
+.button {
+  flex: none;
+  padding: $space-xs $space-s;
+  font: inherit;
+  font-size: $font-size-s;
+  color: $color-text;
+  cursor: pointer;
+  // Opaque, so the button stands out on the wall as well as in the panel.
+  background: $color-panel;
+  border: 1px solid $color-panel-border;
+  border-radius: $radius-s;
+  transition: border-color $transition-default;
+
+  &:hover {
+    border-color: $color-accent;
+  }
+}
+
+// In the middle of the top wall, clear of the court.
+.show {
+  position: absolute;
+  top: calc(#{$wall-width} / 2);
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+// flex: none, because overflow-x drops a flex item's min-height to 0, so a
+// scrolling panel would otherwise squeeze the snippet instead of scrolling.
+.snippet {
+  flex: none;
+  margin: 0;
+  padding: $space-s;
+  overflow-x: auto;
+  font-family: $font-mono;
+  font-size: $font-size-s;
+  color: $color-text-muted;
+  border: 1px solid $color-panel-border;
+  border-radius: $radius-s;
+}
