@@ -14,7 +14,7 @@ Conventions are ported from Jason's react-snow (which adapted fourfightingfoxes 
 pnpm install          # Node 24, pnpm 12
 pnpm dev              # demo playground (Vite) at http://localhost:5318, imports from src/
 pnpm build            # tsc -> dist/ (ESM .js + .d.ts), plus styles.css
-pnpm build:demo       # playground -> demo/dist/ (release.yml adds --base /react-pong/ for Pages)
+pnpm build:demo       # playground -> demo/dist/ (release.yml deploys it to Pages)
 pnpm lint             # ESLint 10 flat config
 pnpm typecheck        # tsc --noEmit
 pnpm test             # Vitest
@@ -38,7 +38,7 @@ pnpm test             # Vitest
 - Source is TypeScript, compiled by plain `tsc` (no bundler) to per-file ESM in `dist/`. Relative imports in `src/` use `.js` extensions so the output is valid Node ESM. TypeScript is pinned to 6.0 because typescript-eslint doesn't support 7 yet; revisit when it does. `dist/` is git-ignored on `main`.
 - `src/styles.css` is plain CSS (no Sass in the package) and the build copies it to `dist/`.
 - `package.json` `exports` map `.` to the React entry, `./core` to the core entry, and `./styles.css` to the stylesheet. `react` (>= 19) is a peer dependency, optional for core-only consumers. `sideEffects` lists only the CSS.
-- **Releases:** bump `version` in a PR. When it merges, `.github/workflows/release.yml` sees a version with no matching tag, then lints, tests, builds, commits `dist/` in a release-only commit, tags `v<version>`, and creates a GitHub Release. A second job deploys the playground to GitHub Pages at `https://jasondecamp.github.io/react-pong/`. Merges without a bump don't release.
+- **Releases:** bump `version` in a PR. When it merges, `.github/workflows/release.yml` sees a version with no matching tag, then lints, tests, builds, commits `dist/` in a release-only commit, tags `v<version>`, and creates a GitHub Release. A second job deploys the playground to GitHub Pages at the custom domain `https://pong.fourfightingfoxes.com/`. Merges without a bump don't release; running the workflow by hand (`gh workflow run release.yml`) redeploys the playground without one.
 - Consumers install `github:jasondecamp/react-pong#v<version>` or `#semver:^<range>`. `#main` installs don't work, because `main` has no `dist/`.
 
 ### Directory structure

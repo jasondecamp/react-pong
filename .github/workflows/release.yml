@@ -6,10 +6,13 @@ name: Release
 # Merges without a version bump find the tag already there and stop. Each
 # release also publishes the playground to GitHub Pages. That has to happen
 # here: a separate workflow listening for releases would never fire, because
-# releases created with GITHUB_TOKEN don't trigger workflows.
+# releases created with GITHUB_TOKEN don't trigger workflows. Run by hand, it
+# finds the tag already there, releases nothing, and publishes the playground
+# again from main.
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 # One release at a time, never interrupted partway.
 concurrency:
@@ -68,11 +71,12 @@ jobs:
           TAG: ${{ steps.version.outputs.tag }}
         run: gh release create "$TAG" --verify-tag --generate-notes --title "$TAG"
 
-  # The playground at https://jasondecamp.github.io/react-pong/, built from the
-  # released source under the Pages base path.
+  # The playground at https://pong.fourfightingfoxes.com/, the custom domain
+  # set in the repository's Pages settings, built from the released source. It
+  # is served from the root of that domain, so the build needs no base path.
   pages:
     needs: release
-    if: needs.release.outputs.released == 'true'
+    if: needs.release.outputs.released == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -89,7 +93,7 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm build:demo --base /react-pong/
+      - run: pnpm build:demo
       - uses: actions/upload-pages-artifact@v5
         with:
           path: demo/dist

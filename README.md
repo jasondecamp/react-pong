@@ -4,7 +4,7 @@
 
 Retro Pong you can embed: a framework-free Pong engine, plus a composite React component (`<Pong>`) that drops a playfield into any React app.
 
-Play it in the [playground](https://jasondecamp.github.io/react-pong/).
+Play it in the [playground](https://pong.fourfightingfoxes.com/).
 
 - You play the right paddle against an AI on the left, at four difficulties, the last of them with no handicap at all. First to 11 wins. A toss decides the first serve, and after that whoever scores serves next.
 - A good guest on the host page: keys are heard only while the court has focus, nothing is global, any number of games can share a page, and unmounting releases everything.
