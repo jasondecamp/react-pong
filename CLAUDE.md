@@ -89,7 +89,7 @@ docs/PLAN.md
 
 ## Styling
 
-- **The package ships one plain stylesheet**, `react-pong/styles.css`. Its classes are prefixed `pong-` (no CSS modules in the package, since consumers' bundlers vary). Every color, size, and the font is a `--pong-*` custom property with a default (most are the original's values; the ball, the AI's paddle, and the message size have since changed); add a property rather than a hard-coded value.
+- **The package ships one plain stylesheet**, `react-pong/styles.css`. Its classes are prefixed `pong-` (no CSS modules in the package, since consumers' bundlers vary). Every color, size, and the font is a `--pong-*` custom property with a default (most are the original's values; the ball, the AI's paddle, and the message size have since changed); add a property rather than a hard-coded value. The defaults are the light palette; the dark palette's block, which appears twice (under `prefers-color-scheme: dark`, and for `.pong-dark`), redefines the few that differ, so change both copies together.
 - The engine's per-frame `transform` writes are the one sanctioned inline style. Never put CSS variables in inline styles.
 - Transitions are disabled under `prefers-reduced-motion`.
 - **The demo** uses Sass with CSS modules, as in fourfightingfoxes:

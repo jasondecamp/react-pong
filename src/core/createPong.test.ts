@@ -43,10 +43,11 @@ const play = (pong: PongInstance, maxFrames = 2000) => {
 
 /**
  * A game the AI can't lose a point in quickly: the human paddle never moves.
- * It serves at once unless a test asks for the toss.
+ * It serves at once unless a test asks for the toss, and its start screen is
+ * still unless a test asks for attract mode.
  */
 const start = (options: PongOptions = {}) => {
-  const pong = createPong(elements, { toss: false, ...options });
+  const pong = createPong(elements, { toss: false, attract: false, ...options });
   elements.court.focus();
   return pong;
 };
@@ -642,6 +643,227 @@ describe('createPong', () => {
       expect(elements.court.querySelector('.pong-ripple-active')).toBeNull();
       expect(leftRipple?.style.transform).toBe('');
       expect(rightRipple?.style.transform).toBe('');
+    });
+  });
+
+  describe('attract', () => {
+    const seconds = (count: number) => {
+      for (let frame = 0; frame < count * 60; frame++) browser.frame();
+    };
+
+    const ballX = () => Number(/translate\((-?[\d.]+)px/.exec(elements.ball.style.transform)?.[1]);
+
+    it('plays the start screen by itself, without leaving it', () => {
+      const pong = start({ attract: true });
+      const listener = vi.fn();
+      pong.subscribe(listener);
+      expect(browser.pendingFrames()).toBe(1);
+      seconds(2);
+      expect(ballX()).toBeGreaterThanOrEqual(0);
+      expect(pong.getState()).toMatchObject({ phase: 'start', message: 'start', scores: { left: 0, right: 0 } });
+      expect(listener).not.toHaveBeenCalled();
+      expect(browser.pendingFrames()).toBe(1);
+    });
+
+    it('makes no sound', () => {
+      start({ attract: true });
+      // A key press allows audio; the paddle keys do nothing else here.
+      press('ArrowUp');
+      seconds(60);
+      expect(browser.audioContexts[0]?.oscillators ?? []).toHaveLength(0);
+    });
+
+    it('gives way to the real game on a serve', () => {
+      const pong = start({ attract: true });
+      seconds(2);
+      press('Enter');
+      expect(pong.getState().phase).toBe('rally');
+      play(pong);
+      expect(pong.getState().scores.left + pong.getState().scores.right).toBe(1);
+    });
+
+    it('rests under the help and offscreen', () => {
+      const pong = start({ attract: true });
+      seconds(2);
+      pong.openHelp();
+      browser.frame();
+      expect(browser.pendingFrames()).toBe(0);
+      pong.closeHelp();
+      expect(browser.pendingFrames()).toBe(1);
+      browser.setVisible(false);
+      expect(browser.pendingFrames()).toBe(0);
+      browser.setVisible(true);
+      expect(browser.pendingFrames()).toBe(1);
+    });
+
+    it('keeps playing when the court loses focus', () => {
+      start({ attract: true });
+      seconds(2);
+      elements.court.blur();
+      browser.frame();
+      expect(browser.pendingFrames()).toBe(1);
+    });
+
+    it('starts and stops with its option', () => {
+      const pong = start();
+      expect(browser.pendingFrames()).toBe(0);
+      pong.update({ attract: true });
+      expect(browser.pendingFrames()).toBe(1);
+      seconds(2);
+      expect(ballX()).toBeGreaterThanOrEqual(0);
+      pong.update({ attract: false });
+      expect(ballX()).toBe(-30);
+      browser.frame();
+      expect(browser.pendingFrames()).toBe(0);
+    });
+
+    it('returns after a reset', () => {
+      const pong = start({ attract: true, winningScore: 1 });
+      press('Enter');
+      play(pong);
+      expect(pong.getState().phase).toBe('gameOver');
+      browser.frame();
+      expect(browser.pendingFrames()).toBe(0);
+      press('Escape');
+      expect(browser.pendingFrames()).toBe(1);
+    });
+
+    it('is off under reduced motion', () => {
+      vi.stubGlobal('matchMedia', (query: string) => ({ matches: query.includes('reduce') }));
+      start({ attract: true });
+      expect(browser.pendingFrames()).toBe(0);
+    });
+  });
+
+  describe('ball color', () => {
+    const withBallColor = () => {
+      const ballColor = piece('pong-ball-color');
+      elements.ball.append(ballColor);
+      elements = { ...elements, ballColor };
+      return ballColor;
+    };
+
+    it('stretches the color element across the court and holds it still under the ball', () => {
+      const ballColor = withBallColor();
+      const pong = start();
+      press('Enter');
+      for (let frame = 0; frame < 10; frame++) browser.frame();
+      expect(pong.getState().phase).toBe('rally');
+      const x = Number(/translate\((-?[\d.]+)px/.exec(elements.ball.style.transform)?.[1]);
+      // An 800px court is 53.33 times the width of a 15px ball.
+      expect(ballColor.style.transform).toBe(`translateX(${-x}px) scaleX(53.33)`);
+    });
+
+    it('is handed back on destroy', () => {
+      const ballColor = withBallColor();
+      const pong = start();
+      pong.destroy();
+      expect(ballColor.style.transform).toBe('');
+    });
+  });
+
+  describe('trail', () => {
+    const withTrail = (count = 4) => {
+      const trail = piece('pong-trail');
+      for (let index = 0; index < count; index++) {
+        const ghost = piece('pong-ball');
+        ghost.append(piece('pong-ball-color'));
+        trail.append(ghost);
+      }
+      elements.court.append(trail);
+      elements = { ...elements, trail };
+      const ghosts = Array.from(trail.children) as HTMLElement[];
+      return { ghosts, first: ghosts[0] as HTMLElement };
+    };
+
+    const xOf = (element: HTMLElement) => Number(/translate\((-?[\d.]+)px/.exec(element.style.transform)?.[1]);
+    const fading = (ghost: HTMLElement) => (
+      ghost.classList.contains('pong-trail-fade') || ghost.classList.contains('pong-trail-fade-again')
+    );
+    const untouched = (ghosts: HTMLElement[]) => ghosts.every((ghost) => (
+      ghost.style.transform === '' && !fading(ghost) && (ghost.firstElementChild as HTMLElement).style.transform === ''
+    ));
+
+    it('leaves the ghosts alone when the trail is turned off', () => {
+      const { ghosts } = withTrail();
+      start({ trail: false });
+      press('Enter');
+      for (let frame = 0; frame < 30; frame++) browser.frame();
+      expect(untouched(ghosts)).toBe(true);
+    });
+
+    it('is off under reduced motion', () => {
+      vi.stubGlobal('matchMedia', (query: string) => ({ matches: query.includes('reduce') }));
+      const { ghosts } = withTrail();
+      start({ toss: false });
+      press('Enter');
+      for (let frame = 0; frame < 30; frame++) browser.frame();
+      expect(untouched(ghosts)).toBe(true);
+    });
+
+    it('leaves a ghost behind at a steady interval, each colored for where it is', () => {
+      const { ghosts, first } = withTrail(12);
+      const pong = start({ trail: true, toss: false });
+      press('Enter');
+      // The first frame takes no time; the eight after it cover 0.133s, two ghosts' worth at one every 0.05s.
+      for (let frame = 0; frame < 9; frame++) browser.frame();
+      expect(pong.getState().phase).toBe('rally');
+      expect(ghosts.filter(fading)).toHaveLength(2);
+      expect(first).toHaveClass('pong-trail-fade');
+      const color = first.firstElementChild as HTMLElement;
+      expect(color.style.transform).toBe(`translateX(${-xOf(first)}px) scaleX(53.33)`);
+    });
+
+    it('leaves each ghost where it is while the ball moves on, evenly spaced', () => {
+      const { ghosts } = withTrail(12);
+      start({ trail: true, toss: false });
+      press('Enter');
+      for (let frame = 0; frame < 15; frame++) browser.frame();
+      const left = ghosts.filter(fading).map(xOf);
+      expect(left.length).toBeGreaterThanOrEqual(3);
+      for (let frame = 0; frame < 3; frame++) browser.frame();
+      expect(ghosts.filter(fading).map(xOf).slice(0, left.length)).toEqual(left);
+      const [a = 0, b = 0, c = 0] = left;
+      expect(a).not.toBe(b);
+      expect(b - a).toBeCloseTo(c - b, 0);
+    });
+
+    it('uses the ghosts in turn, starting each one\'s fade over', () => {
+      const { ghosts, first } = withTrail(2);
+      start({ trail: true, toss: false });
+      press('Enter');
+      for (let frame = 0; frame < 9; frame++) browser.frame();
+      expect(ghosts.every((ghost) => ghost.classList.contains('pong-trail-fade'))).toBe(true);
+      const before = xOf(first);
+      for (let frame = 0; frame < 3; frame++) browser.frame();
+      expect(first).toHaveClass('pong-trail-fade-again');
+      expect(first).not.toHaveClass('pong-trail-fade');
+      expect(xOf(first)).not.toBe(before);
+    });
+
+    it('lets the ghosts fade where they are once the ball stops', () => {
+      const { ghosts } = withTrail();
+      const pong = start({ trail: true, toss: false, winningScore: 1 });
+      press('Enter');
+      for (let frame = 0; frame < 3000 && pong.getState().phase === 'rally'; frame++) browser.frame();
+      expect(pong.getState().phase).toBe('gameOver');
+      expect(ghosts.every(fading)).toBe(true);
+    });
+
+    it('clears the trail when it is turned off and on destroy', () => {
+      const { ghosts } = withTrail();
+      const pong = start({ trail: true, toss: false });
+      press('Enter');
+      for (let frame = 0; frame < 30; frame++) browser.frame();
+      expect(untouched(ghosts)).toBe(false);
+      pong.update({ trail: false });
+      browser.frame();
+      expect(untouched(ghosts)).toBe(true);
+      pong.update({ trail: true });
+      for (let frame = 0; frame < 30; frame++) browser.frame();
+      expect(untouched(ghosts)).toBe(false);
+      pong.destroy();
+      expect(untouched(ghosts)).toBe(true);
     });
   });
 

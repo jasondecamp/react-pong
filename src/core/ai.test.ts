@@ -155,35 +155,51 @@ describe('aiTarget', () => {
 });
 
 describe('aiShot', () => {
-  it('sometimes goes for a corner, often for a swing, otherwise for a square hit', () => {
+  // A ball leaving the right paddle's face at `y`, slanted by `degrees`, at `speed` px per second.
+  const sent = (degrees: number, y = 192.5, speed = 500) => {
     const state = court();
-    expect(aiShot(state, profile, rolls(0.1, 0.2))).toBe('top');
-    expect(aiShot(state, profile, rolls(0.1, 0.8))).toBe('bottom');
-    expect(aiShot(state, profile, rolls(0.3, 0.2))).toBe('up');
-    expect(aiShot(state, profile, rolls(0.3, 0.8))).toBe('down');
-    expect(aiShot(state, profile, rolls(0.9))).toBe('center');
-  });
-
-  // A ball leaving the right paddle's face at mid-height, slanted by `degrees`.
-  const sent = (degrees: number) => {
-    const state = court();
-    Object.assign(state.ball, { x: 770, y: 192.5, speed: 500, heading: -1, angle: (degrees * Math.PI) / 180 });
+    Object.assign(state.ball, { x: 770, y, speed, heading: -1, angle: (degrees * Math.PI) / 180 });
     return state;
   };
 
+  it('sometimes goes for a corner, often for a swing, otherwise for a square hit', () => {
+    const state = sent(0);
+    expect(aiShot(state, 'left', profile, rolls(0.1, 0.2))).toBe('top');
+    expect(aiShot(state, 'left', profile, rolls(0.1, 0.8))).toBe('bottom');
+    expect(aiShot(state, 'left', profile, rolls(0.3, 0.2))).toBe('up');
+    expect(aiShot(state, 'left', profile, rolls(0.3, 0.8))).toBe('down');
+    expect(aiShot(state, 'left', profile, rolls(0.9))).toBe('center');
+  });
+
   it('swings against a steep ball, to flatten its path', () => {
-    // At 20 degrees down it drops 275px over the 755px crossing and arrives still falling, without a wall.
-    expect(aiShot(sent(20), profile, rolls(0.3, 0.8))).toBe('down');
-    // At 35 degrees down it meets the floor once on the way and arrives rising, so the swing goes down.
-    expect(aiShot(sent(35), profile, rolls(0.3, 0.2))).toBe('down');
-    expect(aiShot(sent(-35), profile, rolls(0.3, 0.8))).toBe('up');
+    // At 20 degrees it isn't steep, and the swing goes either way.
+    expect(aiShot(sent(20), 'left', profile, rolls(0.3, 0.8))).toBe('down');
+    // At 35 degrees down it meets the floor once on the way and arrives at y = 200 rising, so the swing goes down.
+    expect(aiShot(sent(35, 41.4), 'left', profile, rolls(0.3, 0.2))).toBe('down');
+    expect(aiShot(sent(-35, 328.6), 'left', profile, rolls(0.3, 0.8))).toBe('up');
     // At 60 degrees it meets the floor, the ceiling, and the floor again, and arrives rising.
-    expect(aiShot(sent(60), profile, rolls(0.3, 0.2))).toBe('down');
+    expect(aiShot(sent(60, 32.3), 'left', profile, rolls(0.3, 0.2))).toBe('down');
   });
 
   it('still goes for a corner or a square hit on a steep ball', () => {
-    expect(aiShot(sent(60), profile, rolls(0.1, 0.2))).toBe('top');
-    expect(aiShot(sent(60), profile, rolls(0.9))).toBe('center');
+    expect(aiShot(sent(60), 'left', profile, rolls(0.1, 0.2))).toBe('top');
+    expect(aiShot(sent(60), 'left', profile, rolls(0.9))).toBe('center');
+  });
+
+  it('gives up a swing it has no room to run up to', () => {
+    // This ball arrives 49px from the ceiling, rising: a swing down would have to start above the court.
+    expect(aiShot(sent(35), 'left', profile, rolls(0.3, 0.2))).toBe('center');
+  });
+
+  it('gives up a swing it has no time to run up to', () => {
+    // The ball is across in 0.15s, less than the swing's lead.
+    expect(aiShot(sent(0, 192.5, 5000), 'left', profile, rolls(0.3, 0.2))).toBe('center');
+    // Across in 0.3s: time to swing, but not to get 180px to the start of the run-up first.
+    const far = sent(0, 192.5, 2500);
+    far.left.y = 340;
+    expect(aiShot(far, 'left', profile, rolls(0.3, 0.8))).toBe('center');
+    far.left.y = 100;
+    expect(aiShot(far, 'left', profile, rolls(0.3, 0.8))).toBe('down');
   });
 });
 
@@ -263,9 +279,14 @@ describe('aiDestination', () => {
 
   it('knows when its swing is due', () => {
     // 0.3s out, then 0.15s out, with a swing lead of 0.2s.
-    expect(aiSwinging(incoming(165, 'down'), 'left', profile)).toBe(false);
-    expect(aiSwinging(incoming(90, 'down'), 'left', profile)).toBe(true);
-    expect(aiSwinging(incoming(90, 'center'), 'left', profile)).toBe(false);
+    const hungBack = (x: number, shot: 'center' | 'down') => {
+      const state = incoming(x, shot);
+      state.left.y = 110;
+      return state;
+    };
+    expect(aiSwinging(hungBack(165, 'down'), 'left', profile)).toBe(false);
+    expect(aiSwinging(hungBack(90, 'down'), 'left', profile)).toBe(true);
+    expect(aiSwinging(hungBack(90, 'center'), 'left', profile)).toBe(false);
   });
 
   it('hangs back for a swing, by the distance it will cover on the way in', () => {
@@ -282,10 +303,39 @@ describe('aiDestination', () => {
     expect(aiDirection(state, 'left', profile, rolls(0))).toBe(1);
   });
 
-  it('holds off a swing it has got too far ahead of', () => {
+  it('doesn\'t break off a swing to hesitate', () => {
     const state = incoming(40, 'down');
-    state.left.y = 175;
+    state.left.y = 150;
+    expect(aiDirection(state, 'left', profile, rolls())).toBe(1);
+  });
+
+  it('waits rather than swing past a ball it is level with', () => {
+    // 0.15s out and 7.5px short of the ball: a swing from here would carry it 44px past.
+    const state = incoming(90, 'down');
+    expect(aiSwinging(state, 'left', profile)).toBe(false);
+    expect(aiDirection(state, 'left', profile, rolls(0))).toBe(0);
+    expect(aiDestination(state, 'left', profile)).toBeCloseTo(177.5);
+  });
+
+  it('comes back to a ball its swing would only take it further past', () => {
+    const state = incoming(90, 'down');
+    state.left.y = 230;
     expect(aiDirection(state, 'left', profile, rolls(0))).toBe(-1);
+    expect(aiDestination(state, 'left', profile)).toBeCloseTo(177.5);
+  });
+
+  it('carries a swing under way through a ball it will still catch', () => {
+    // 0.05s out, a standing paddle here would swing: it lands the ball squarely.
+    const state = incoming(40, 'down');
+    state.left.y = 170;
+    expect(aiSwinging(state, 'left', profile)).toBe(true);
+    // Already at speed it will run 21px past, off square but still on the paddle, and it keeps going.
+    Object.assign(state.left, { direction: 1, held: 0.15 });
+    expect(aiSwinging(state, 'left', profile)).toBe(true);
+    // From further on it would miss altogether, so it stops.
+    state.left.y = 185;
+    expect(aiSwinging(state, 'left', profile)).toBe(false);
+    expect(aiDirection(state, 'left', profile, rolls(0))).toBe(0);
   });
 
   it('is the place it chose to wait while the ball is away', () => {

@@ -3,14 +3,17 @@
 
 export type Theme = {
   color: string;
-  /** Empty keeps the package default. */
+  /** Empty leaves the ball its gradient between the paddle colors. */
   ballColor: string;
-  /** Empty keeps the package default. */
+  /** Empty keeps the package default, which the light and dark palettes each set. */
   leftPaddleColor: string;
   /** Empty follows `color`. */
   rightPaddleColor: string;
+  /** Empty keeps the package default, which the light and dark palettes each set. */
   muted: string;
   ballSize: number;
+  /** 0 is square, 50 round. */
+  ballRadius: number;
   paddleWidth: number;
   paddleHeight: number;
   rippleSize: number;
@@ -21,11 +24,12 @@ export type Theme = {
 
 export const defaultTheme: Theme = {
   color: '#007ee5',
-  ballColor: '#000000',
-  leftPaddleColor: '#a61c28',
+  ballColor: '',
+  leftPaddleColor: '',
   rightPaddleColor: '',
-  muted: '#ccc',
+  muted: '',
   ballSize: 15,
+  ballRadius: 0,
   paddleWidth: 15,
   paddleHeight: 15,
   rippleSize: 240,
@@ -41,6 +45,7 @@ const properties: Record<keyof Theme, { property: string; unit: string }> = {
   rightPaddleColor: { property: '--pong-paddle-right-color', unit: '' },
   muted: { property: '--pong-muted', unit: '' },
   ballSize: { property: '--pong-ball-size', unit: 'px' },
+  ballRadius: { property: '--pong-ball-radius', unit: '%' },
   paddleWidth: { property: '--pong-paddle-width', unit: 'px' },
   paddleHeight: { property: '--pong-paddle-height', unit: '%' },
   rippleSize: { property: '--pong-ripple-size', unit: 'px' },
@@ -51,6 +56,12 @@ const properties: Record<keyof Theme, { property: string; unit: string }> = {
 
 // A typed color goes into a style sheet as written, so keep it to one value.
 const clean = (value: string | number) => String(value).replace(/[;{}<>]/g, '');
+
+/** The package's defaults for the colors that its light and dark palettes set differently. */
+export const paletteDefaults = {
+  light: { leftPaddleColor: '#a61c28', muted: '#ccc' },
+  dark: { leftPaddleColor: '#c42b38', muted: '#555' },
+};
 
 /** A CSS declaration for each property that differs from its default. */
 export const themeDeclarations = (theme: Theme) => (Object.keys(properties) as (keyof Theme)[])

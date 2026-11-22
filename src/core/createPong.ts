@@ -17,6 +17,15 @@ const round = (value: number) => Math.round(value * 100) / 100;
 // With smack talk on, the chance that a point draws a remark.
 const smackChance = 0.5;
 
+/** An element the engine can move: one with inline styles, whichever window it belongs to. */
+const styled = (element: Element | null): element is HTMLElement => element != null && 'style' in element;
+
+// How often the ball leaves a ghost behind, in seconds.
+const trailInterval = 0.05;
+// On a ghost, the classes that fade it out. The two do the same; swapping one for the other starts the fade over.
+const trailClass = 'pong-trail-fade';
+const trailAgainClass = 'pong-trail-fade-again';
+
 // On a ripple element, the class that runs its rings.
 const rippleClass = 'pong-ripple-active';
 
@@ -31,7 +40,7 @@ const sameKeys = (a: PongKeys, b: PongKeys) => {
  * focus. The game opens on the start screen and waits for a serve.
  */
 export const createPong = (elements: PongElements, initialOptions: PongOptions = {}): PongInstance => {
-  const { court, ball, leftPaddle, rightPaddle, leftRipple, rightRipple } = elements;
+  const { court, ball, ballColor, leftPaddle, rightPaddle, leftRipple, rightRipple, trail } = elements;
   const view = court.ownerDocument.defaultView;
   let rawOptions: PongOptions = { ...initialOptions };
   let options: ResolvedPongOptions = resolveOptions(rawOptions);
@@ -61,8 +70,21 @@ export const createPong = (elements: PongElements, initialOptions: PongOptions =
   };
   const listeners = new Set<() => void>();
 
+  // Asked for once and read each time: the trail checks it at every frame.
+  const motionQuery = view?.matchMedia?.('(prefers-reduced-motion: reduce)');
+  const reducedMotion = () => motionQuery?.matches === true;
+
+  /** Whether the start screen should be playing itself. Reduced motion turns attract mode off. */
+  const attracting = () => options.attract && !reducedMotion();
+
   const simulation = createSimulation(Math.random);
-  simulation.setOptions(options);
+  const applyOptions = () => simulation.setOptions({
+    winningScore: options.winningScore,
+    difficulty: options.difficulty,
+    paddleSpeed: options.paddleSpeed,
+    attract: attracting(),
+  });
+  applyOptions();
   const sound = createSound(view);
 
   /** Replace the snapshot from the simulation and tell the subscribers. */
@@ -91,9 +113,94 @@ export const createPong = (elements: PongElements, initialOptions: PongOptions =
     return downHeld ? 1 : 0;
   };
 
+  // The trail: at a steady interval the ball leaves a ghost of itself where
+  // it is, which stays put while the stylesheet fades it out. The ghosts are
+  // used in turn, so the oldest is the next to be left behind.
+  const ghosts: HTMLElement[] = [];
+  const ghostColors: (HTMLElement | null)[] = [];
+  for (const ghost of Array.from(trail?.children ?? [])) {
+    if (!styled(ghost)) continue;
+    const color = ghost.firstElementChild;
+    ghosts.push(ghost);
+    ghostColors.push(styled(color) ? color : null);
+  }
+  // The next ghost to leave, and which of the two fade classes this turn through the ghosts uses.
+  let trailNext = 0;
+  let trailAgain = false;
+  // How long since the last ghost was left, on a clock that runs only while the ball is moving.
+  let trailDue = 0;
+  // Where the ball was before the latest step, if it has been moving since.
+  let trailFromX = 0;
+  let trailFromY = 0;
+  let trailFrom = false;
+  let trailShown = false;
+
+  const trailing = () => options.trail && ghosts.length > 0 && !reducedMotion();
+
+  const clearTrail = () => {
+    for (let index = 0; index < ghosts.length; index++) {
+      const ghost = ghosts[index];
+      const color = ghostColors[index];
+      if (ghost == null) continue;
+      ghost.style.transform = '';
+      ghost.classList.remove(trailClass, trailAgainClass);
+      if (color != null) color.style.transform = '';
+    }
+    trailShown = false;
+  };
+
+  /** Leave the next ghost at a spot on the court, colored for it, and start its fade. */
+  const leaveGhost = (x: number, y: number) => {
+    const { width, ballWidth } = simulation.state;
+    const ghost = ghosts[trailNext];
+    const color = ghostColors[trailNext];
+    if (ghost == null) return;
+    ghost.style.transform = `translate(${round(x)}px, ${round(y)}px)`;
+    if (color != null && ballWidth > 0) {
+      color.style.transform = `translateX(${round(-x)}px) scaleX(${round(width / ballWidth)})`;
+    }
+    ghost.classList.remove(trailAgain ? trailClass : trailAgainClass);
+    ghost.classList.add(trailAgain ? trailAgainClass : trailClass);
+    trailNext = (trailNext + 1) % ghosts.length;
+    if (trailNext === 0) trailAgain = !trailAgain;
+    trailShown = true;
+  };
+
+  /**
+   * Leave the ghosts that came due during a step of `dt` seconds, each where the ball was at its moment, so they
+   * are evenly spaced at any frame rate.
+   */
+  const trackTrail = (dt: number) => {
+    const { ball: ballState } = simulation.state;
+    if (!trailing()) {
+      if (trailShown) clearTrail();
+      trailFrom = false;
+      return;
+    }
+    // A ball at rest (parked, or stopped by a point) leaves nothing new; the ghosts it left fade where they are.
+    if (ballState.speed === 0) {
+      trailDue = 0;
+      trailFrom = false;
+      return;
+    }
+    trailDue += dt;
+    while (trailDue >= trailInterval) {
+      trailDue -= trailInterval;
+      const back = trailFrom && dt > 0 ? Math.min(trailDue / dt, 1) : 0;
+      leaveGhost(ballState.x - (ballState.x - trailFromX) * back, ballState.y - (ballState.y - trailFromY) * back);
+    }
+    trailFromX = ballState.x;
+    trailFromY = ballState.y;
+    trailFrom = true;
+  };
+
   const render = () => {
-    const { ball: ballState, left, right } = simulation.state;
+    const { ball: ballState, left, right, width, ballWidth } = simulation.state;
     ball.style.transform = `translate(${round(ballState.x)}px, ${round(ballState.y)}px)`;
+    // The ball is a window onto its color element, which spans the court and stays put while the ball moves.
+    if (ballColor != null && ballWidth > 0) {
+      ballColor.style.transform = `translateX(${round(-ballState.x)}px) scaleX(${round(width / ballWidth)})`;
+    }
     leftPaddle.style.transform = `translateY(${round(left.y - leftRest)}px)`;
     rightPaddle.style.transform = `translateY(${round(right.y - rightRest)}px)`;
   };
@@ -110,11 +217,13 @@ export const createPong = (elements: PongElements, initialOptions: PongOptions =
     element.classList.add(rippleClass);
   };
 
-  // The loop runs during a rally and the toss before it, and otherwise only
-  // while a paddle key is held: the paddle moves between points too, as in the original.
+  // The loop runs during a rally and the toss before it, on the start screen
+  // in attract mode (unless the help covers it), and otherwise only while a
+  // paddle key is held: the paddle moves between points too, as in the original.
   const shouldRun = () => {
     const { phase, width, height } = simulation.state;
     if (destroyed || !visible || width <= 0 || height <= 0) return false;
+    if (phase === 'start' && attracting() && !help) return true;
     return phase === 'rally' || phase === 'toss' || (phase !== 'paused' && inputDirection() !== 0);
   };
 
@@ -123,10 +232,12 @@ export const createPong = (elements: PongElements, initialOptions: PongOptions =
     const dt = lastTime == null ? 0 : (time - lastTime) / 1000;
     lastTime = time;
     const events = simulation.step(dt, inputDirection());
+    // Attract rallies are silent.
+    const audible = options.sound && !simulation.state.attract;
     for (let index = 0; index < events.length; index++) {
       const event = events[index];
       if (event === 'wall' || event === 'paddle') {
-        if (options.sound) sound.play(event);
+        if (audible) sound.play(event);
         if (event === 'paddle' && options.ripple) ripple();
       } else if (event === 'point') {
         scored();
@@ -138,6 +249,7 @@ export const createPong = (elements: PongElements, initialOptions: PongOptions =
         publish(null);
       }
     }
+    trackTrail(dt);
     render();
     if (shouldRun()) frame = view?.requestAnimationFrame(tick) ?? null;
   };
@@ -165,8 +277,6 @@ export const createPong = (elements: PongElements, initialOptions: PongOptions =
     lastTime = null;
     frame = view?.requestAnimationFrame(tick) ?? null;
   };
-
-  const reducedMotion = () => view?.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
 
   const serve = () => {
     if (destroyed) return;
@@ -224,9 +334,15 @@ export const createPong = (elements: PongElements, initialOptions: PongOptions =
   const update = (nextOptions: PongOptions) => {
     if (destroyed) return;
     const previousKeys = options.keys;
+    const wasAttracting = simulation.state.attract;
     rawOptions = { ...rawOptions, ...nextOptions };
     options = resolveOptions(rawOptions);
-    simulation.setOptions(options);
+    applyOptions();
+    // Attract mode starts and stops with its option: a rally it ended has left the court.
+    if (wasAttracting !== (simulation.state.phase === 'start' && attracting())) {
+      render();
+      wake();
+    }
     // The snapshot carries the keys, the difficulty, and the winning score, so it changes only when they do.
     const keysChanged = !sameKeys(previousKeys, options.keys);
     if (!keysChanged) options.keys = previousKeys;
@@ -265,6 +381,7 @@ export const createPong = (elements: PongElements, initialOptions: PongOptions =
     if (destroyed || !help) return;
     help = false;
     publish(state.message, state.messageCount);
+    wake();
   };
 
   // Keys with a modifier are the browser's or the host page's shortcuts.
@@ -399,8 +516,10 @@ export const createPong = (elements: PongElements, initialOptions: PongOptions =
       listeners.clear();
       // Hand the pieces back to the stylesheet, which draws the start screen.
       ball.style.transform = '';
+      if (ballColor != null) ballColor.style.transform = '';
       leftPaddle.style.transform = '';
       rightPaddle.style.transform = '';
+      clearTrail();
       for (const element of [leftRipple, rightRipple]) {
         if (element == null) continue;
         element.style.transform = '';

@@ -6,6 +6,30 @@
   box-sizing: border-box;
 }
 
+@mixin palette($scheme, $palette) {
+  color-scheme: $scheme;
+
+  @each $name, $value in $palette {
+    --color-#{$name}: #{$value};
+  }
+}
+
+// Light, unless the system is set to dark; App names a theme on the root
+// element when the playground's control isn't on "System".
+:root {
+  @include palette(light, $palette-light);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    @include palette(dark, $palette-dark);
+  }
+}
+
+:root[data-theme='dark'] {
+  @include palette(dark, $palette-dark);
+}
+
 html,
 body,
 #root {

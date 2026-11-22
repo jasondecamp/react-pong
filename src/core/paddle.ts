@@ -20,10 +20,12 @@ export const paddleRate = (held: number) => {
 
 /**
  * How far a paddle gets in its first `time` seconds from a standstill, in
- * seconds of travel at its starting speed: `paddleRate` summed over that time.
+ * seconds of travel at its starting speed: `paddleRate` summed over that
+ * time, with no more speed gained once it has been held for `maxHold`.
  */
-export const paddleTravel = (time: number) => {
+export const paddleTravel = (time: number): number => {
   if (time <= 0) return 0;
+  if (time > maxHold) return paddleTravel(maxHold) + (time - maxHold) * paddleRate(maxHold);
   const eased = time < easeTime
     ? (time * time * time) / (3 * easeTime * easeTime)
     : easeTime / 3 + (time - easeTime);
