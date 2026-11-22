@@ -38,7 +38,7 @@ describe('Pong', () => {
     const { container } = render(<Pong />);
     const court = screen.getByRole('application', { name: 'Pong court' });
     expect(court).toHaveAttribute('tabindex', '0');
-    expect(container.querySelector('.pong-ball')).toHaveAttribute('aria-hidden', 'true');
+    expect(container.querySelector('.pong-court > .pong-ball')).toHaveAttribute('aria-hidden', 'true');
     expect(container.querySelectorAll('.pong-paddle[aria-hidden="true"]')).toHaveLength(2);
     expect(container.querySelectorAll('.pong-ripple[aria-hidden="true"]')).toHaveLength(2);
     expect(container.querySelector('.pong-score')).toHaveTextContent('0:0');
@@ -110,6 +110,58 @@ describe('Pong', () => {
     expect(container.querySelector('.pong-paddle-right')).not.toHaveClass('pong-paddle-pulsing');
     rerender(<Pong difficulty='hard' />);
     expect(left).not.toHaveClass('pong-paddle-pulsing');
+  });
+
+  it('glows the paddle of a side that is one point from winning', async () => {
+    const user = userEvent.setup();
+    const { container, rerender } = render(
+      <Pong winningScore={2} toss={false}><Pong.Court autoFocus /><Phase /></Pong>,
+    );
+    const left = container.querySelector('.pong-paddle-left');
+    const right = container.querySelector('.pong-paddle-right');
+    expect(left).not.toHaveClass('pong-paddle-game-point');
+    expect(right).not.toHaveClass('pong-paddle-game-point');
+    // The player's paddle never moves, so the AI takes the point.
+    await user.keyboard('{Enter}');
+    play();
+    expect(screen.getByTestId('phase')).toHaveTextContent('between');
+    expect(left).toHaveClass('pong-paddle-game-point');
+    expect(left).not.toHaveClass('pong-paddle-pulsing');
+    expect(right).not.toHaveClass('pong-paddle-game-point');
+    // On the impossible difficulty it is both pulsing and at game point.
+    rerender(<Pong winningScore={2} toss={false} difficulty='impossible'><Pong.Court autoFocus /><Phase /></Pong>);
+    expect(left).toHaveClass('pong-paddle-pulsing', 'pong-paddle-game-point');
+    await user.keyboard('{Enter}');
+    play();
+    expect(screen.getByTestId('phase')).toHaveTextContent('gameOver');
+    expect(left).not.toHaveClass('pong-paddle-game-point');
+  });
+
+  it('doesn\'t glow on the start screen, even when every point is game point', () => {
+    const { container } = render(<Pong winningScore={1} />);
+    expect(container.querySelector('.pong-paddle-game-point')).not.toBeInTheDocument();
+  });
+
+  it('gives the ball its color element', () => {
+    const { container } = render(<Pong />);
+    expect(container.querySelector('.pong-ball > .pong-ball-color')).toBeInTheDocument();
+  });
+
+  it('gives the ball a trail of ten ghosts, built like the ball', () => {
+    const { container } = render(<Pong />);
+    expect(container.querySelector('.pong-trail')).toHaveAttribute('aria-hidden', 'true');
+    expect(container.querySelectorAll('.pong-trail > .pong-ball > .pong-ball-color')).toHaveLength(10);
+  });
+
+  it('follows the system theme unless it is given one', () => {
+    const { container, rerender } = render(<Pong />);
+    expect(container.firstChild).not.toHaveClass('pong-light');
+    expect(container.firstChild).not.toHaveClass('pong-dark');
+    rerender(<Pong theme='dark' />);
+    expect(container.firstChild).toHaveClass('pong', 'pong-dark');
+    rerender(<Pong theme='light' />);
+    expect(container.firstChild).toHaveClass('pong', 'pong-light');
+    expect(container.firstChild).not.toHaveClass('pong-dark');
   });
 
   it('focuses the court on mount when asked to', () => {

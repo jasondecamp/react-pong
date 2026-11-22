@@ -1,6 +1,6 @@
 {
   "name": "react-pong",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Retro Pong you can embed: a framework-free Pong engine with a composite React component.",
   "license": "MIT",
   "author": "Jason DeCamp <jason@fourfightingfoxes.com>",

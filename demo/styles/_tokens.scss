@@ -18,18 +18,42 @@ $font-size-s: 12px;
 $font-size-m: 14px;
 $font-size-l: 16px;
 
-$color-page: #fff;
-$color-wall: #ececec;
-$color-court-border: #ccc;
-// The panel is white so it stands apart from the gray wall beside it.
-$color-panel: #fff;
-$color-panel-border: #b9c0cc;
-$color-text: #1d2330;
-$color-text-muted: #505a6b;
+// The colors that differ between light and dark are custom properties, which
+// global.scss sets from the palettes below, so the page can follow the theme.
+$color-page: var(--color-page);
+$color-wall: var(--color-wall);
+$color-court-border: var(--color-court-border);
+$color-panel: var(--color-panel);
+$color-panel-border: var(--color-panel-border);
+$color-text: var(--color-text);
+$color-text-muted: var(--color-text-muted);
+$color-track: var(--color-track);
 $color-accent: #007ee5;
 $color-on-accent: #fff;
 $color-knob: #fff;
-$color-track: rgba(0, 0, 0, 0.26);
+
+// The page matches the package's court (--pong-background). The panel stands
+// apart from the wall beside it: white on gray, or the lighter of two darks.
+$palette-light: (
+  page: #fff,
+  wall: #ececec,
+  court-border: #ccc,
+  panel: #fff,
+  panel-border: #b9c0cc,
+  text: #1d2330,
+  text-muted: #505a6b,
+  track: rgba(0, 0, 0, 0.26),
+);
+$palette-dark: (
+  page: #111,
+  wall: #1b1b1b,
+  court-border: #3a3a3a,
+  panel: #22252b,
+  panel-border: #454b57,
+  text: #e6e9ef,
+  text-muted: #a3abba,
+  track: rgba(255, 255, 255, 0.3),
+);
 $color-focus-ring: rgba(0, 126, 229, 0.35);
 
 $panel-width: 320px;

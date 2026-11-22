@@ -101,6 +101,12 @@ export type PongOptions = {
    * them between games. Default `'normal'`.
    */
   difficulty?: PongDifficulty;
+  /**
+   * Attract mode: on the start screen the AI plays both paddles, like an arcade cabinet waiting for a coin. Its
+   * rallies make no sound and score nothing, your paddle keys do nothing until you serve, and serving clears the
+   * court for the real game. Off under `prefers-reduced-motion`. Default `true`.
+   */
+  attract?: boolean;
   /** Post a smack-talk message after about half the points, so it stays a surprise. Default `true`. */
   smack?: boolean;
   /** Play the wall, paddle, and point blips (Web Audio, starting with the first key press). Default `true`. */
@@ -110,6 +116,12 @@ export type PongOptions = {
    * `prefers-reduced-motion`. Default `true`.
    */
   ripple?: boolean;
+  /**
+   * Leave a fading trail behind the ball: every 0.05 seconds it leaves a ghost of itself where it is, which stays
+   * put and fades away, so the ghosts sit further apart as the ball speeds up. Needs the trail element; off under
+   * `prefers-reduced-motion`. Default `true`.
+   */
+  trail?: boolean;
   /**
    * Open each match with a toss for the first serve: the ball bounces between the paddles and comes to rest on
    * the side that won it (skipped under `prefers-reduced-motion`), that side is announced, and a 3-2-1 countdown
@@ -148,6 +160,12 @@ export type ResolvedPongOptions = Required<Omit<PongOptions, 'onPoint' | 'onGame
 export type PongElements = {
   court: HTMLElement;
   ball: HTMLElement;
+  /**
+   * Optional. An element inside the ball that colors it by where it is across the court. `react-pong/styles.css`
+   * paints it with a gradient between the two paddle colors and clips it to the ball; the engine stretches it to
+   * the court's width and slides it opposite the ball. Without it the ball is one flat color.
+   */
+  ballColor?: HTMLElement | null;
   leftPaddle: HTMLElement;
   rightPaddle: HTMLElement;
   /**
@@ -156,6 +174,14 @@ export type PongElements = {
    */
   leftRipple?: HTMLElement | null;
   rightRipple?: HTMLElement | null;
+  /**
+   * Optional. A container whose children are ghosts of the ball, each built like the ball (its color element
+   * included, if the ball has one), at the court's top-left corner. With the `trail` option on, the engine leaves
+   * them behind the ball in turn, one every 0.05 seconds, and gives each a class (`pong-trail-fade` or
+   * `pong-trail-fade-again`) that `react-pong/styles.css` fades it out with. A ghost is used again once the rest
+   * have been, so ten cover the default 0.5 second fade.
+   */
+  trail?: HTMLElement | null;
 };
 
 export type PongInstance = {

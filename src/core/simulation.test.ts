@@ -404,15 +404,27 @@ describe('simulation', () => {
       expect(first).toBeGreaterThan(0);
       expect(first).toBeLessThan(0.1);
       let last = first;
-      for (let step = 0; step < 7; step++) {
+      for (let step = 0; step < 8; step++) {
         const next = moved();
         expect(next).toBeGreaterThan(last);
         last = next;
       }
-      // 0.08s in, it is up to its starting speed and a little more.
-      expect(last).toBeCloseTo(1.08);
-      for (let step = 0; step < 92; step++) last = moved();
-      expect(last).toBeCloseTo(2);
+      // Past 0.08s, it is up to its starting speed and a little more.
+      expect(last).toBeCloseTo(1.085);
+      for (let step = 0; step < 91; step++) last = moved();
+      expect(last).toBeCloseTo(2, 1);
+    });
+
+    it('cover the same distance at any frame rate', () => {
+      const travelled = (hz: number) => {
+        const simulation = court();
+        simulation.setOptions({ winningScore: 11, difficulty: 'normal', paddleSpeed: 0.25 });
+        const before = simulation.state.right.y;
+        for (let frame = 0; frame < hz / 2; frame++) simulation.step(1 / hz, 1);
+        return simulation.state.right.y - before;
+      };
+      expect(travelled(120)).toBeCloseTo(travelled(60));
+      expect(travelled(30)).toBeCloseTo(travelled(60));
     });
 
     it('cross a court of any size in the same time', () => {
@@ -620,6 +632,124 @@ describe('simulation', () => {
         expect(state.phase).toBe('gameOver');
         expect(Math.max(state.scores.left, state.scores.right)).toBe(11);
       }
+    });
+  });
+
+  describe('attract', () => {
+    const attracting = (random: () => number = seededRandom(1)) => {
+      const simulation = court(random);
+      simulation.setOptions({ winningScore: 11, difficulty: 'normal', paddleSpeed: 1.2, attract: true });
+      return simulation;
+    };
+
+    /** Step in 60Hz frames for `seconds`, collecting every event. */
+    const run = (simulation: Simulation, seconds: number, input: -1 | 0 | 1 = 0) => {
+      const events: string[] = [];
+      for (let frame = 0; frame < seconds * 60; frame++) events.push(...simulation.step(1 / 60, input));
+      return events;
+    };
+
+    it('leaves the start screen still unless it is asked for', () => {
+      const simulation = court();
+      run(simulation, 5);
+      expect(simulation.state.attract).toBe(false);
+      expect(simulation.state.ball.x).toBeLessThan(-15);
+    });
+
+    it('serves by itself after a moment, without leaving the start screen', () => {
+      const simulation = attracting();
+      const { state } = simulation;
+      run(simulation, 0.5);
+      expect(state.attract).toBe(true);
+      expect(state.ball.speed).toBe(0);
+      run(simulation, 0.5);
+      expect(state.ball.speed).toBeGreaterThan(0);
+      expect(state.ball.x).toBeGreaterThanOrEqual(0);
+      expect(state.phase).toBe('start');
+    });
+
+    it('plays both paddles, rally after rally, and scores nothing', () => {
+      const simulation = attracting();
+      const { state } = simulation;
+      let leftMoved = false;
+      let rightMoved = false;
+      let serves = 0;
+      const events: string[] = [];
+      for (let frame = 0; frame < 120 * 60; frame++) {
+        const resting = state.ball.speed === 0;
+        events.push(...simulation.step(1 / 60, 0));
+        if (resting && state.ball.speed > 0) serves += 1;
+        leftMoved ||= state.left.y !== 170;
+        rightMoved ||= state.right.y !== 170;
+        expect(state.ball.y).toBeGreaterThanOrEqual(0);
+        expect(state.ball.y).toBeLessThanOrEqual(385);
+      }
+      expect(leftMoved).toBe(true);
+      expect(rightMoved).toBe(true);
+      expect(serves).toBeGreaterThan(1);
+      expect(events).toContain('paddle');
+      expect(events).not.toContain('point');
+      expect(events).not.toContain('gameOver');
+      expect(state.scores).toEqual({ left: 0, right: 0 });
+      expect(state.phase).toBe('start');
+    });
+
+    it('ignores the paddle keys', () => {
+      const played = attracting();
+      const watched = attracting();
+      run(played, 3, -1);
+      run(watched, 3, 0);
+      expect(played.state.right.y).toBe(watched.state.right.y);
+    });
+
+    it('clears the court for a real serve', () => {
+      const simulation = attracting();
+      const { state } = simulation;
+      run(simulation, 3);
+      simulation.serve();
+      expect(state.attract).toBe(false);
+      expect(state.phase).toBe('rally');
+      expect(state.right.target).toBeNull();
+      expect(state.right.direction).toBe(0);
+      // The right paddle is the player's again.
+      simulation.step(1 / 60, 1);
+      expect(state.right.direction).toBe(1);
+    });
+
+    it('still tosses a fair coin for the first serve', () => {
+      const servers = new Set<string | null>();
+      for (let seed = 1; seed <= 20; seed++) {
+        const simulation = attracting(seededRandom(seed));
+        run(simulation, 3);
+        simulation.toss(false);
+        expect(simulation.state.attract).toBe(false);
+        expect(simulation.state.phase).toBe('toss');
+        servers.add(simulation.state.server);
+      }
+      expect(servers).toEqual(new Set(['left', 'right']));
+    });
+
+    it('parks the ball when it is turned off', () => {
+      const simulation = attracting();
+      const { state } = simulation;
+      run(simulation, 3);
+      simulation.setOptions({ winningScore: 11, difficulty: 'normal', paddleSpeed: 1.2, attract: false });
+      expect(state.attract).toBe(false);
+      expect(state.ball.x).toBeLessThan(-15);
+      expect(state.server).toBeNull();
+      run(simulation, 3);
+      expect(state.ball.x).toBeLessThan(-15);
+    });
+
+    it('comes back after a reset', () => {
+      const simulation = attracting();
+      const { state } = simulation;
+      simulation.serve();
+      simulation.reset();
+      expect(state.attract).toBe(false);
+      run(simulation, 1);
+      expect(state.attract).toBe(true);
+      expect(state.ball.speed).toBeGreaterThan(0);
     });
   });
 

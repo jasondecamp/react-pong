@@ -1,15 +1,17 @@
 import classNames from 'classnames';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pong } from 'react-pong';
-import type { PongKeys, PongOptions } from 'react-pong';
+import type { PongKeys, PongOptions, PongTheme } from 'react-pong';
 import { defaultKeys, defaultOptions } from 'react-pong/core';
-import { defaultTheme, themeDeclarations } from '../../theme';
+import { defaultTheme, paletteDefaults, themeDeclarations } from '../../theme';
 import type { Theme } from '../../theme';
+import { useSystemDark } from '../../useSystemDark';
 import { Controls } from '../Controls/Controls';
 import type { ControlValue } from '../Controls/ControlsContext';
 import styles from './App.module.scss';
 
-type Options = Required<Pick<PongOptions, 'winningScore' | 'difficulty' | 'smack' | 'sound' | 'ripple' | 'toss' | 'keys' | 'paddleSpeed'>>;
+type Options = Required<Pick<PongOptions, 'winningScore' | 'difficulty' | 'attract' | 'smack' | 'sound' | 'ripple' | 'trail' | 'toss' | 'keys' | 'paddleSpeed'>>
+  & { theme: PongTheme };
 
 const letterKeys: PongKeys = { w: 'up', s: 'down', Enter: 'serve', ' ': 'pause', Escape: 'reset', '?': 'help', d: 'difficulty' };
 
@@ -19,12 +21,15 @@ const formatKey = (key: string) => (/^[A-Za-z_$][\w$]*$/.test(key) ? key : `'${k
 const initialOptions: Options = {
   winningScore: defaultOptions.winningScore,
   difficulty: defaultOptions.difficulty,
+  attract: defaultOptions.attract,
   smack: defaultOptions.smack,
   sound: defaultOptions.sound,
   ripple: defaultOptions.ripple,
+  trail: defaultOptions.trail,
   toss: defaultOptions.toss,
   keys: defaultKeys,
   paddleSpeed: defaultOptions.paddleSpeed,
+  theme: 'system',
 };
 
 const formatProp = (name: string, value: ControlValue) => {
@@ -53,7 +58,16 @@ export const App = () => {
   const [options, setOptions] = useState(initialOptions);
   const [theme, setTheme] = useState(defaultTheme);
   const [panelOpen, setPanelOpen] = useState(false);
+  const systemDark = useSystemDark();
   const declarations = themeDeclarations(theme);
+  const dark = options.theme === 'dark' || (options.theme === 'system' && systemDark);
+  const palette = dark ? paletteDefaults.dark : paletteDefaults.light;
+
+  // The page wears the game's theme: global.scss follows the system unless the root element names one.
+  useEffect(() => {
+    if (options.theme === 'system') delete document.documentElement.dataset.theme;
+    else document.documentElement.dataset.theme = options.theme;
+  }, [options.theme]);
 
   const setOption = (name: string, value: ControlValue) => setOptions((current) => ({ ...current, [name]: value }));
   const setThemeValue = (name: string, value: ControlValue) => setTheme((current): Theme => ({ ...current, [name]: value }));
@@ -87,6 +101,13 @@ export const App = () => {
             Click the court, then press Enter to serve. Up and down move your paddle, on the right. Space pauses, ? lists the keys, and D changes the difficulty between games.
           </p>
           <Controls values={options} onChange={setOption}>
+            <Controls.Group title='Appearance'>
+              <Controls.Choice name='theme' label='Light or dark'>
+                <Controls.ChoiceOption value='system' label='System' />
+                <Controls.ChoiceOption value='light' label='Light' />
+                <Controls.ChoiceOption value='dark' label='Dark' />
+              </Controls.Choice>
+            </Controls.Group>
             <Controls.Group title='Game'>
               <Controls.Slider name='winningScore' label='Winning score' min={1} max={21} />
               <Controls.Choice name='difficulty' label='Difficulty'>
@@ -100,20 +121,23 @@ export const App = () => {
                 <Controls.ChoiceOption value={defaultKeys} label='Arrows' />
                 <Controls.ChoiceOption value={letterKeys} label='W and S' />
               </Controls.Choice>
+              <Controls.Toggle name='attract' label='Attract mode' />
               <Controls.Toggle name='smack' label='Smack talk' />
               <Controls.Toggle name='sound' label='Sound' />
               <Controls.Toggle name='ripple' label='Ripple' />
+              <Controls.Toggle name='trail' label='Ball trail' />
               <Controls.Toggle name='toss' label='Toss for first serve' />
             </Controls.Group>
           </Controls>
           <Controls values={theme} onChange={setThemeValue}>
             <Controls.Group title='Theme'>
               <Controls.Color name='color' label='Color' />
-              <Controls.Color name='ballColor' label='Ball' fallback={defaultTheme.ballColor} />
-              <Controls.Color name='leftPaddleColor' label='Left paddle' fallback={defaultTheme.leftPaddleColor} />
+              <Controls.Color name='ballColor' label='Ball (one color)' />
+              <Controls.Color name='leftPaddleColor' label='Left paddle' fallback={palette.leftPaddleColor} />
               <Controls.Color name='rightPaddleColor' label='Right paddle' fallback={theme.color} />
-              <Controls.Color name='muted' label='Muted' />
+              <Controls.Color name='muted' label='Muted' fallback={palette.muted} />
               <Controls.Slider name='ballSize' label='Ball size (px)' min={5} max={60} />
+              <Controls.Slider name='ballRadius' label='Ball roundness (%)' min={0} max={50} />
               <Controls.Slider name='paddleWidth' label='Paddle width (px)' min={5} max={60} />
               <Controls.Slider name='paddleHeight' label='Paddle height (% of court)' min={5} max={50} />
               <Controls.Slider name='rippleSize' label='Ripple size (px)' min={20} max={600} />

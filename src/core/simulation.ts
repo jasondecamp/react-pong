@@ -1,6 +1,6 @@
 import { aiAim, aiDestination, aiDirection, aiProfiles, aiShot, aiSwinging, aiTarget } from './ai.js';
 import type { AiShot } from './ai.js';
-import { maxHold, paddleRate } from './paddle.js';
+import { maxHold, paddleTravel } from './paddle.js';
 import type { PongDifficulty, PongPhase, PongScores, Side } from './types.js';
 
 /** Up (`-1`), still (`0`), or down (`1`). */
@@ -64,6 +64,8 @@ export type SimulationState = {
   /** The side that scored the last point. */
   scorer: Side | null;
   winner: Side | null;
+  /** The start screen is playing itself: both paddles are the AI's, and nothing scores. */
+  attract: boolean;
 };
 
 export type SimulationOptions = {
@@ -71,6 +73,8 @@ export type SimulationOptions = {
   difficulty: PongDifficulty;
   /** Court heights per second. */
   paddleSpeed: number;
+  /** On the start screen the AI plays both paddles, for show. Default `false`. */
+  attract?: boolean;
 };
 
 export type Simulation = {
@@ -120,6 +124,8 @@ const tossDuration = 1.8;
 // Then a countdown from this number, with this many seconds on each.
 const countFrom = 3;
 const countInterval = 0.6;
+// In attract mode, the wait before each serve, in seconds.
+const attractRest = 0.8;
 // Each paddle hit returns the ball 5% faster.
 const hitSpeedUp = 1.05;
 // A moving paddle drags the ball with it: this fraction of the paddle's own
@@ -167,18 +173,28 @@ export const createSimulation = (random: () => number): Simulation => {
     countdown: 0,
     scorer: null,
     winner: null,
+    attract: false,
   };
   const events: SimulationEvent[] = [];
   let ai = aiProfiles.normal;
   let winningScore = 11;
-  // Seconds since the AI last decided.
-  let aiClock = 0;
-  // The AI has begun the swing it planned for the ball coming at it.
-  let aiSwung = false;
+  // For each paddle the AI plays: the seconds since it last decided, and
+  // whether it has begun the swing it planned for the ball coming at it.
+  const minds = { left: { clock: 0, swung: false }, right: { clock: 0, swung: false } };
+  // Attract mode is wanted on the start screen.
+  let attractWanted = false;
+  // Seconds an attract rally has waited for its next serve.
+  let attractClock = 0;
   // The ball got past the paddle it was heading for, and is on its way out.
   let missed = false;
   // Seconds into the toss for the first serve.
   let tossClock = 0;
+
+  const steer = (paddle: Paddle, direction: Direction) => {
+    if (paddle.direction === direction) return;
+    paddle.direction = direction;
+    paddle.held = 0;
+  };
 
   /** Off the court, where the start screen keeps the ball. */
   const parkBall = () => {
@@ -212,6 +228,33 @@ export const createSimulation = (random: () => number): Simulation => {
     );
   };
 
+  /** The AI playing `side` plans for a serve: where to wait if it is serving, and how to return it if not. */
+  const brief = (side: Side, server: Side) => {
+    const paddle = state[side];
+    paddle.target = server === side ? aiTarget(state, side, ai, random) : null;
+    paddle.aim = server === side ? 0 : aiAim(ai, random);
+    paddle.shot = server === side ? 'center' : aiShot(state, side, ai, random);
+    minds[side].clock = 0;
+  };
+
+  /** The AI playing `side` forgets its plans and stops. */
+  const dismiss = (side: Side) => {
+    const paddle = state[side];
+    paddle.target = null;
+    paddle.shot = 'center';
+    paddle.aim = 0;
+    steer(paddle, 0);
+  };
+
+  /** Clear the court of an attract rally, leaving the start screen as it was before one. */
+  const endAttract = () => {
+    state.attract = false;
+    state.server = null;
+    dismiss('left');
+    dismiss('right');
+    parkBall();
+  };
+
   /** Send the ball off from the face of the server's paddle. */
   const launch = (server: Side) => {
     const { ball } = state;
@@ -226,11 +269,9 @@ export const createSimulation = (random: () => number): Simulation => {
     ball.angle = (random() * 2 - 1) * maxServeAngle;
     state.server = server;
     state.countdown = 0;
-    state.left.target = server === 'left' ? aiTarget(state, 'left', ai, random) : null;
-    state.left.shot = server === 'left' ? 'center' : aiShot(state, ai, random);
-    state.left.aim = server === 'left' ? 0 : aiAim(ai, random);
-    state.phase = 'rally';
-    aiClock = 0;
+    brief('left', server);
+    if (state.attract) brief('right', server);
+    else state.phase = 'rally';
     missed = false;
   };
 
@@ -265,23 +306,24 @@ export const createSimulation = (random: () => number): Simulation => {
     }
   };
 
-  const steer = (paddle: Paddle, direction: Direction) => {
-    if (paddle.direction === direction) return;
-    paddle.direction = direction;
-    paddle.held = 0;
-  };
-
-  /** Move a paddle the way it is steered. One making for a particular place (`stopAt`) stops exactly there. */
+  /**
+   * Move a paddle the way it is steered. One making for a particular place
+   * (`stopAt`) stops exactly there, and stays there if the place then shifts
+   * by less than the paddle moves in a step: without that, a paddle already
+   * in place would run on past a place that moved back by a hair.
+   */
   const movePaddle = (paddle: Paddle, dt: number, stopAt: number | null) => {
     const maxY = state.height - state.paddleHeight;
     if (paddle.direction === 0) return;
     // Pushing against a wall builds no more speed.
     if (paddle.direction === 1 ? paddle.y >= maxY : paddle.y <= 0) return;
-    paddle.held = Math.min(paddle.held + dt, maxHold);
     const from = paddle.y;
-    const speed = state.paddleSpeed * state.height * paddleRate(paddle.held);
-    paddle.y = clamp(from + paddle.direction * speed * dt, 0, maxY);
-    if (stopAt != null && (stopAt - from) * (stopAt - paddle.y) <= 0) paddle.y = stopAt;
+    // The distance its speed adds up to over the step, so that it moves the same at any frame rate.
+    const travel = paddleTravel(paddle.held + dt) - paddleTravel(paddle.held);
+    paddle.held = Math.min(paddle.held + dt, maxHold);
+    const reach = state.paddleSpeed * state.height * travel;
+    if (stopAt != null && Math.abs(stopAt - from) <= reach) paddle.y = stopAt;
+    else paddle.y = clamp(from + paddle.direction * reach, 0, maxY);
   };
 
   const point = (scorer: Side) => {
@@ -290,10 +332,7 @@ export const createSimulation = (random: () => number): Simulation => {
     // Scoring earns the next serve.
     state.server = scorer;
     state.ball.speed = 0;
-    state.left.target = null;
-    state.left.shot = 'center';
-    state.left.aim = 0;
-    steer(state.left, 0);
+    dismiss('left');
     events.push('point');
     if (state.scores[scorer] >= winningScore) {
       state.phase = 'gameOver';
@@ -314,13 +353,13 @@ export const createSimulation = (random: () => number): Simulation => {
     ball.heading = side === 'left' ? 1 : -1;
     ball.angle = clamp(angle, -maxAngle, maxAngle);
     ball.speed *= hitSpeedUp;
-    // Having sent the ball away, the AI decides at once where to wait for it.
-    // With the ball on its way back, it decides how to return it.
-    if (side === 'left') {
-      state.left.target = aiTarget(state, 'left', ai, random);
-    } else {
-      state.left.shot = aiShot(state, ai, random);
-      state.left.aim = aiAim(ai, random);
+    // Having sent the ball away, an AI decides at once where to wait for it.
+    // With the ball on its way to it, an AI decides how to return it.
+    const receiver: Side = side === 'left' ? 'right' : 'left';
+    if (side === 'left' || state.attract) state[side].target = aiTarget(state, side, ai, random);
+    if (receiver === 'left' || state.attract) {
+      state[receiver].aim = aiAim(ai, random);
+      state[receiver].shot = aiShot(state, receiver, ai, random);
     }
     events.push('paddle');
   };
@@ -366,6 +405,30 @@ export const createSimulation = (random: () => number): Simulation => {
     return ((from <= above ? above : below) - from) / (to - from);
   };
 
+  /** The ball is live: in a rally, or in attract mode's imitation of one. */
+  const inPlay = () => state.phase === 'rally' || state.attract;
+
+  // The AI playing `side` decides at its own fixed rate, whatever the frame
+  // rate. A swing is planned rather than a reaction, so it begins on time
+  // instead of waiting for the next decision.
+  const think = (side: Side, elapsed: number) => {
+    const mind = minds[side];
+    mind.clock += elapsed;
+    const swinging = aiSwinging(state, side, ai);
+    if (swinging && !mind.swung && ai.rate !== Infinity) mind.clock = Math.max(mind.clock, 1 / ai.rate);
+    mind.swung = swinging;
+    const interval = 1 / ai.rate;
+    if (interval <= 0) {
+      // No reaction time at all: it decides at every step.
+      mind.clock = 0;
+      steer(state[side], aiDirection(state, side, ai, random));
+    }
+    while (interval > 0 && mind.clock >= interval) {
+      mind.clock -= interval;
+      steer(state[side], aiDirection(state, side, ai, random));
+    }
+  };
+
   // Swept: the ball travels to whichever comes first of a wall, the face of
   // the paddle it is heading for, or the edge behind that paddle, and carries
   // on from there with the time left. The paddles have already moved, so each
@@ -376,7 +439,7 @@ export const createSimulation = (random: () => number): Simulation => {
     const leftFace = state.paddleWidth;
     const rightFace = state.width - state.paddleWidth - state.ballWidth;
     let remaining = dt;
-    for (let bounce = 0; bounce < maxBounces && remaining > 0 && state.phase === 'rally'; bounce++) {
+    for (let bounce = 0; bounce < maxBounces && remaining > 0 && ball.speed > 0 && inPlay(); bounce++) {
       const vx = ball.heading * ball.speed * Math.cos(ball.angle);
       const vy = ball.speed * Math.sin(ball.angle);
       let time = remaining;
@@ -430,7 +493,12 @@ export const createSimulation = (random: () => number): Simulation => {
         events.push('wall');
       } else if (reached) {
         ball.x = target;
-        if (missed) {
+        if (missed && state.attract) {
+          // Nothing scores in attract mode: the side that would have serves the next ball.
+          state.server = heading === 'left' ? 'right' : 'left';
+          parkBall();
+          attractClock = 0;
+        } else if (missed) {
           point(heading === 'left' ? 'right' : 'left');
         } else {
           hit(heading, paddleTo, (paddle.y - before) / dt);
@@ -446,6 +514,8 @@ export const createSimulation = (random: () => number): Simulation => {
       winningScore = options.winningScore;
       ai = aiProfiles[options.difficulty];
       state.paddleSpeed = options.paddleSpeed;
+      attractWanted = options.attract === true;
+      if (!attractWanted && state.attract) endAttract();
     },
 
     setBounds: (width, height, ballWidth, ballHeight, paddleWidth, paddleHeight) => {
@@ -480,11 +550,13 @@ export const createSimulation = (random: () => number): Simulation => {
     serve: () => {
       if (state.phase !== 'start' && state.phase !== 'between') return;
       if (state.width <= 0 || state.height <= 0) return;
+      if (state.attract) endAttract();
       launch(state.server ?? (random() < 0.5 ? 'left' : 'right'));
     },
 
     toss: (animate) => {
       if (state.phase !== 'start' || state.width <= 0 || state.height <= 0) return;
+      if (state.attract) endAttract();
       state.server = random() < 0.5 ? 'left' : 'right';
       state.phase = 'toss';
       state.countdown = 0;
@@ -509,11 +581,9 @@ export const createSimulation = (random: () => number): Simulation => {
       state.countdown = 0;
       state.scorer = null;
       state.winner = null;
-      state.left.target = null;
-      state.left.shot = 'center';
-      state.left.aim = 0;
-      steer(state.left, 0);
-      steer(state.right, 0);
+      state.attract = false;
+      dismiss('left');
+      dismiss('right');
       parkBall();
     },
 
@@ -524,29 +594,26 @@ export const createSimulation = (random: () => number): Simulation => {
       if (!(elapsed > 0)) return events;
       const leftBefore = state.left.y;
       const rightBefore = state.right.y;
-      steer(state.right, input);
-      if (state.phase === 'rally') {
-        // The AI decides at its own fixed rate, whatever the frame rate. A
-        // swing is planned rather than a reaction, so it begins on time
-        // instead of waiting for the next decision.
-        aiClock += elapsed;
-        const swinging = aiSwinging(state, 'left', ai);
-        if (swinging && !aiSwung && ai.rate !== Infinity) aiClock = Math.max(aiClock, 1 / ai.rate);
-        aiSwung = swinging;
-        const interval = 1 / ai.rate;
-        if (interval <= 0) {
-          // No reaction time at all: it decides at every step.
-          aiClock = 0;
-          steer(state.left, aiDirection(state, 'left', ai, random));
-        }
-        while (interval > 0 && aiClock >= interval) {
-          aiClock -= interval;
-          steer(state.left, aiDirection(state, 'left', ai, random));
-        }
+      if (state.phase === 'start' && attractWanted && !state.attract) {
+        state.attract = true;
+        attractClock = 0;
       }
-      movePaddle(state.left, elapsed, state.phase === 'rally' ? aiDestination(state, 'left', ai) : null);
-      movePaddle(state.right, elapsed, null);
-      if (state.phase === 'rally') moveBall(elapsed, leftBefore, rightBefore);
+      if (state.attract && state.ball.speed === 0) {
+        // Between attract rallies the paddles stand still until the next serve.
+        steer(state.left, 0);
+        steer(state.right, 0);
+        attractClock += elapsed;
+        if (attractClock < attractRest) return events;
+        launch(state.server ?? (random() < 0.5 ? 'left' : 'right'));
+      }
+      const playing = inPlay();
+      // In attract mode the AI has the right paddle too, and the keys do nothing.
+      if (!state.attract) steer(state.right, input);
+      if (playing) think('left', elapsed);
+      if (state.attract) think('right', elapsed);
+      movePaddle(state.left, elapsed, playing ? aiDestination(state, 'left', ai) : null);
+      movePaddle(state.right, elapsed, state.attract ? aiDestination(state, 'right', ai) : null);
+      if (playing) moveBall(elapsed, leftBefore, rightBefore);
       else if (state.phase === 'toss') stepToss(elapsed);
       return events;
     },

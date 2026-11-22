@@ -9,9 +9,23 @@ import { PongContext } from './PongContext.js';
 import { createPongStore } from './pongStore.js';
 import { Score } from './Score.js';
 
+/** Which palette the game wears: the system's light or dark setting, or one of them whatever the system says. */
+export type PongTheme = 'system' | 'light' | 'dark';
+
+const themeClasses: Record<PongTheme, string | undefined> = {
+  system: undefined,
+  light: 'pong-light',
+  dark: 'pong-dark',
+};
+
 export type PongProps = PongOptions & {
   /** Added to the root element, which is where to set the `--pong-*` custom properties. */
   className?: string;
+  /**
+   * The light or the dark palette. `'system'` follows the visitor's system setting (`prefers-color-scheme`), so
+   * on a page that doesn't, set the one that matches the page. Default `'system'`.
+   */
+  theme?: PongTheme;
   /** The arrangement. Default: `<Pong.Court />`, `<Pong.Score />`, `<Pong.Message />`, and `<Pong.Help />`. */
   children?: ReactNode;
 };
@@ -28,7 +42,7 @@ export type PongProps = PongOptions & {
  *     <Pong.Help />
  *   </Pong>
  */
-export const Pong = ({ className, children, ...options }: PongProps) => {
+export const Pong = ({ className, theme = 'system', children, ...options }: PongProps) => {
   const [store] = useState(createPongStore);
 
   useEffect(() => {
@@ -37,7 +51,7 @@ export const Pong = ({ className, children, ...options }: PongProps) => {
 
   return (
     <PongContext value={store}>
-      <div className={classNames('pong', className)}>
+      <div className={classNames('pong', themeClasses[theme], className)}>
         {children ?? (
           <>
             <Court />

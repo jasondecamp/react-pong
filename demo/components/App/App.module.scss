@@ -22,7 +22,6 @@
 
 .game {
   font-family: $font-game;
-  background: $color-page;
   border: $court-border-width solid $color-court-border;
   // The court owns this page and its border already marks it out, so the
   // package's focus outline, drawn just inside the court's edge and over the

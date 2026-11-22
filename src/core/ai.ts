@@ -146,6 +146,28 @@ const lookAhead = (state: SimulationState, side: Side, profile: AiProfile) => (
   profile.foresight ? timeToArrive(state, side) : timeToReach(state, side)
 );
 
+/** Where the ball's top edge will be `time` seconds from now, walls included. */
+const ballAhead = (state: SimulationState, time: number) => {
+  const { ball } = state;
+  return fold(ball.y + ball.speed * Math.sin(ball.angle) * time, state.height - state.ballHeight);
+};
+
+/**
+ * Where the top edge of the paddle on `side` has to be for a ball whose top
+ * edge is at `ballY` to land on the part of the paddle its shot calls for,
+ * off by the paddle's aiming error.
+ */
+const meetingPosition = (state: SimulationState, side: Side, shot: AiShot, ballY: number) => {
+  let contact = state.paddleHeight / 2;
+  if (shot === 'top') contact = state.ballHeight / 4;
+  else if (shot === 'bottom') contact = state.paddleHeight - state.ballHeight / 4;
+  contact += state[side].aim * state.paddleHeight;
+  return ballY + state.ballHeight / 2 - contact;
+};
+
+/** How far the middle of a paddle can be from the ball and still meet it squarely. */
+const squareSlack = (state: SimulationState) => Math.max(0, state.paddleHeight / 2 - state.ballHeight);
+
 /**
  * Where the top edge of the paddle on `side` should be right now to play its
  * shot, with the ball `time` seconds away. It lines up the part of the paddle
@@ -157,20 +179,58 @@ const lookAhead = (state: SimulationState, side: Side, profile: AiProfile) => (
  */
 const shotPosition = (state: SimulationState, side: Side, profile: AiProfile, time: number) => {
   const { ball } = state;
-  const { aim } = state[side];
   // A shot is chosen for a ball on its way; one going away is simply waited for.
   const shot = ball.heading === (side === 'left' ? -1 : 1) ? state[side].shot : 'center';
   const lead = Math.min(time, profile.swingLead);
-  const ahead = profile.foresight ? time : lead;
-  const ballY = fold(ball.y + ball.speed * Math.sin(ball.angle) * ahead, state.height - state.ballHeight);
-  let contact = state.paddleHeight / 2;
-  if (shot === 'top') contact = state.ballHeight / 4;
-  else if (shot === 'bottom') contact = state.paddleHeight - state.ballHeight / 4;
-  contact += aim * state.paddleHeight;
+  const ballY = ballAhead(state, profile.foresight ? time : lead);
   const remaining = paddleTravel(profile.swingLead) - paddleTravel(profile.swingLead - lead);
   const runUp = swingOf(shot) * state.paddleSpeed * state.height * remaining;
   const maxPaddleY = Math.max(0, state.height - state.paddleHeight);
-  return Math.min(maxPaddleY, Math.max(0, ballY + state.ballHeight / 2 - contact - runUp));
+  return Math.min(maxPaddleY, Math.max(0, meetingPosition(state, side, shot, ballY) - runUp));
+};
+
+/**
+ * Where the top edge of the paddle on `side` has to be when the ball coming
+ * at it arrives, `time` seconds from now, for its shot to land.
+ */
+const arrivalPosition = (state: SimulationState, side: Side, time: number) => {
+  const maxPaddleY = Math.max(0, state.height - state.paddleHeight);
+  const position = meetingPosition(state, side, state[side].shot, ballAhead(state, time));
+  return Math.min(maxPaddleY, Math.max(0, position));
+};
+
+/**
+ * Whether the paddle on `side`, swinging from this moment until the ball
+ * arrives `time` seconds from now, would still meet the ball rather than
+ * carry on past it. A swing yet to begin has to land the ball squarely. One
+ * under way only has to land it on the paddle at all, since breaking off
+ * would cost the paddle all the speed it has. A paddle that would fall short
+ * is swinging as well as it can, so that counts too.
+ */
+const swingLands = (state: SimulationState, side: Side, swing: Direction, time: number) => {
+  const paddle = state[side];
+  const underWay = paddle.direction === swing;
+  const held = underWay ? paddle.held : 0;
+  const travel = state.paddleSpeed * state.height * (paddleTravel(held + time) - paddleTravel(held));
+  const maxPaddleY = Math.max(0, state.height - state.paddleHeight);
+  const reached = Math.min(maxPaddleY, Math.max(0, paddle.y + swing * travel));
+  const past = swing * (reached - arrivalPosition(state, side, time));
+  return past <= (underWay ? Math.max(0, (state.paddleHeight - state.ballHeight) / 2) : squareSlack(state));
+};
+
+/**
+ * Whether the paddle on `side` has what a swing at the ball just sent its
+ * way needs: room on the court for the run-up, and time to get to the start
+ * of it from where the paddle is now.
+ */
+const swingFeasible = (state: SimulationState, side: Side, profile: AiProfile, shot: AiShot) => {
+  const spare = timeToReach(state, side) - profile.swingLead;
+  if (spare < 0 || spare === Infinity) return false;
+  const reach = state.paddleSpeed * state.height;
+  const meeting = meetingPosition(state, side, shot, ballAhead(state, spare + profile.swingLead));
+  const start = meeting - swingOf(shot) * reach * paddleTravel(profile.swingLead);
+  if (start < 0 || start > state.height - state.paddleHeight) return false;
+  return Math.abs(start - state[side].y) <= reach * paddleTravel(spare);
 };
 
 /**
@@ -192,19 +252,27 @@ const aiSeeking = (state: SimulationState, side: Side, profile: AiProfile) => {
 export const aiDestination = (state: SimulationState, side: Side, profile: AiProfile) => {
   const paddle = state[side];
   if (aiSeeking(state, side, profile)) return paddle.target;
-  if (swingOf(paddle.shot) !== 0 && timeToReach(state, side) <= profile.swingLead) return null;
+  const swing = swingOf(paddle.shot);
+  const time = timeToReach(state, side);
+  if (swing !== 0 && time <= profile.swingLead) {
+    // A swing that would carry the paddle past the ball is held back: it makes for the ball instead.
+    return swingLands(state, side, swing, time) ? null : arrivalPosition(state, side, time);
+  }
   return shotPosition(state, side, profile, lookAhead(state, side, profile));
 };
 
 /**
  * Whether the paddle on `side` should be swinging through the ball right
- * now: it means to, and the ball is within the swing's lead of arriving.
+ * now: it means to, the ball is within the swing's lead of arriving, and a
+ * swing from here would meet it. A paddle nearer the ball than its run-up
+ * needs holds still until that last part comes true.
  */
-export const aiSwinging = (state: SimulationState, side: Side, profile: AiProfile) => (
-  swingOf(state[side].shot) !== 0
-  && !aiSeeking(state, side, profile)
-  && timeToReach(state, side) <= profile.swingLead
-);
+export const aiSwinging = (state: SimulationState, side: Side, profile: AiProfile) => {
+  const swing = swingOf(state[side].shot);
+  if (swing === 0 || aiSeeking(state, side, profile)) return false;
+  const time = timeToReach(state, side);
+  return time <= profile.swingLead && swingLands(state, side, swing, time);
+};
 
 /**
  * How far off the mark the next return will be, as a fraction of the
@@ -228,18 +296,23 @@ const arrivalDrift = (state: SimulationState): Direction => {
 };
 
 /**
- * How to return the ball in `state`, decided the moment the opponent sends
- * it: sometimes on a corner, often on the move, otherwise squarely. A swing
- * goes either way, unless the ball is on a steep path: then it goes against
- * the ball, which flattens the path instead of steepening it further.
+ * How the paddle on `side` should return the ball in `state`, decided the
+ * moment the opponent sends it: sometimes on a corner, often on the move,
+ * otherwise squarely. A swing goes either way, unless the ball is on a steep
+ * path: then it goes against the ball, which flattens the path instead of
+ * steepening it further. A swing it has no room or time to run up to is
+ * given up for a square return, so that it never leaves a ball it could have
+ * met for a run-up it can't finish.
  */
-export const aiShot = (state: SimulationState, profile: AiProfile, random: () => number): AiShot => {
+export const aiShot = (state: SimulationState, side: Side, profile: AiProfile, random: () => number): AiShot => {
   const roll = random();
   if (roll < profile.cornerChance) return random() < 0.5 ? 'top' : 'bottom';
   if (roll >= profile.cornerChance + profile.swingChance) return 'center';
   const drift = arrivalDrift(state);
-  if (drift !== 0 && Math.abs(state.ball.angle) > profile.steepAngle) return drift > 0 ? 'up' : 'down';
-  return random() < 0.5 ? 'up' : 'down';
+  let shot: AiShot;
+  if (drift !== 0 && Math.abs(state.ball.angle) > profile.steepAngle) shot = drift > 0 ? 'up' : 'down';
+  else shot = random() < 0.5 ? 'up' : 'down';
+  return swingFeasible(state, side, profile, shot) ? shot : 'center';
 };
 
 /**
@@ -279,12 +352,19 @@ export const aiDirection = (
   const swing = swingOf(paddle.shot);
   const time = timeToReach(state, side);
   const offset = shotPosition(state, side, profile, lookAhead(state, side, profile)) - paddle.y;
-  // How far the middle of the paddle can be from the ball and still meet it squarely.
-  const slack = Math.max(0, state.paddleHeight / 2 - state.ballHeight);
+  const slack = squareSlack(state);
   let toward: Direction = 0;
   if (offset !== 0) toward = offset > 0 ? 1 : -1;
-  // Swing through the ball, unless the paddle has got too far ahead of it.
-  if (swing !== 0 && time <= profile.swingLead && swing * offset >= -slack) toward = swing;
+  if (swing !== 0 && time <= profile.swingLead) {
+    const gap = arrivalPosition(state, side, time) - paddle.y;
+    // Swing through the ball. The swing is planned, not a reaction, so no
+    // hesitation breaks it off. A swing begun now that would carry the paddle
+    // past the ball waits until it wouldn't; a paddle already past the ball
+    // comes back to it. It never moves off a ball it is level with.
+    if (swingLands(state, side, swing, time)) return swing;
+    if (swing * gap > 0 || Math.abs(gap) <= slack) toward = 0;
+    else toward = gap > 0 ? 1 : -1;
+  }
   if (distance < state.width * profile.nearZone && random() < profile.nearChance) return toward;
   if (
     (distance < state.width * profile.trackZone && random() < profile.trackChance)
