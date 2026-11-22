@@ -1,0 +1,552 @@
+/*
+ * react-pong. Import once: import 'react-pong/styles.css'.
+ *
+ * Theme it by setting these custom properties on the root, through <Pong>'s
+ * className. Most defaults are the original's values, and :where() keeps
+ * them at zero specificity so any class of yours wins.
+ *
+ * These are the light palette. The dark one, after them, redefines the few
+ * that assume a light page: it applies when the system is set to dark, unless
+ * the root has .pong-light, and always when the root has .pong-dark.
+ */
+:where(.pong) {
+  --pong-color: #007ee5;
+  /* What the court is painted with, and the help that covers it. */
+  --pong-background: #fff;
+  /* The AI's paddle (left) is dark maroon, and yours follows --pong-color. */
+  --pong-paddle-left-color: #a61c28;
+  --pong-paddle-right-color: var(--pong-color);
+  /* The ball takes its color from where it is: against the left wall it is
+     the right paddle's color, against the right wall the left paddle's, and
+     a mix in between, so a ball coming at you wears your opponent's color.
+     Setting --pong-ball-color, which has no default, makes it that one color
+     everywhere. */
+  --pong-ball-left-color: var(--pong-ball-color, var(--pong-paddle-right-color));
+  --pong-ball-right-color: var(--pong-ball-color, var(--pong-paddle-left-color));
+  /* The rings where the ball meets a paddle follow that paddle's color. */
+  --pong-ripple-left-color: var(--pong-paddle-left-color);
+  --pong-ripple-right-color: var(--pong-paddle-right-color);
+  --pong-muted: #ccc;
+  --pong-message-color: color-mix(in srgb, var(--pong-color) 50%, transparent);
+  /* Smack talk is the AI speaking, so it follows the AI's paddle. */
+  --pong-smack-color: var(--pong-paddle-left-color);
+  --pong-focus-color: var(--pong-muted);
+  --pong-font: inherit;
+  --pong-font-weight: 100;
+  --pong-font-weight-bold: 700;
+  --pong-ball-size: 15px;
+  /* How round the ball's corners are: 0 is the square ball, 50% a round one.
+     Only its look changes; it still meets the walls and paddles as a square. */
+  --pong-ball-radius: 0;
+  --pong-paddle-width: 15px;
+  /* A length, or a percentage of the court height. */
+  --pong-paddle-height: 15%;
+  /* How strong each ghost in the ball's trail is when the ball leaves it,
+     and how long it takes to fade away. */
+  --pong-trail-opacity: 0.5;
+  --pong-trail-duration: 0.5s;
+  /* How wide the rings grow, how thick they are, and how long each takes. */
+  --pong-ripple-size: 240px;
+  --pong-ripple-width: 2px;
+  --pong-ripple-duration: 0.6s;
+  --pong-score-size: 50px;
+  --pong-message-size: 52px;
+  --pong-hint-size: 12px;
+  /* The difficulty shown above the score, a color for each. */
+  --pong-difficulty-easy-color: #2a9d5c;
+  --pong-difficulty-normal-color: #d9900a;
+  --pong-difficulty-hard-color: #e0452c;
+  --pong-difficulty-impossible-color: #7a2bbf;
+  /* A paddle one point from winning glows in its own color, and on the
+     impossible difficulty the AI's paddle glows like a watching eye, swelling
+     steadily to a hotter shade of its own color and back without ever going
+     out. Both follow the paddle's color; to choose a glow yourself, set
+     --pong-paddle-left-glow-color or --pong-paddle-right-glow-color (game
+     point) or --pong-paddle-pulse-color (the eye), which have no defaults.
+     One point from winning, the eye swells to the game-point color instead.
+     The duration is one way, in or out, and times every paddle's glow. */
+  --pong-paddle-pulse-game-point-color: #000;
+  --pong-paddle-pulse-duration: 1.4s;
+  /* The help overlay: what it covers the court with, and its text, which is
+     heavier than the game's so that small type stays readable. */
+  --pong-help-background: var(--pong-background);
+  --pong-help-color: color-mix(in srgb, var(--pong-color) 80%, transparent);
+  --pong-help-size: 18px;
+  --pong-help-font-weight: 400;
+}
+
+/* The dark palette, for a system set to dark. */
+@media (prefers-color-scheme: dark) {
+  :where(.pong:not(.pong-light)) {
+    --pong-background: #111;
+    --pong-paddle-left-color: #c42b38;
+    --pong-muted: #555;
+    --pong-difficulty-impossible-color: #a05ce6;
+    --pong-paddle-pulse-game-point-color: #fff;
+  }
+}
+
+/* The same palette, asked for by name. */
+:where(.pong.pong-dark) {
+  --pong-background: #111;
+  --pong-paddle-left-color: #c42b38;
+  --pong-muted: #555;
+  --pong-difficulty-impossible-color: #a05ce6;
+  --pong-paddle-pulse-game-point-color: #fff;
+}
+
+/* Fills its parent. The court is stacked over the score and message, so the
+   ball passes in front of them and a click anywhere focuses the court. */
+.pong {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  isolation: isolate;
+  font-family: var(--pong-font);
+  background-color: var(--pong-background);
+  font-weight: var(--pong-font-weight);
+}
+
+.pong-court {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  outline: none;
+}
+
+.pong-court:focus-visible {
+  outline: 2px solid var(--pong-focus-color);
+  outline-offset: -2px;
+}
+
+/* The engine moves the ball and paddles with inline transforms. Until it
+   starts, the ball waits off the court and the paddles rest at mid-height.
+   A ball without its color element is one flat color. */
+.pong-ball {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--pong-ball-size);
+  height: var(--pong-ball-size);
+  border-radius: var(--pong-ball-radius);
+  overflow: hidden;
+  background-color: var(--pong-ball-color, var(--pong-color));
+  transform: translateX(-200%);
+  will-change: transform;
+}
+
+/* The ball's trail: ghosts of the ball. At a steady interval the engine leaves
+   one where the ball is and gives it a fade class; it stays put and fades
+   out. The two classes do the same, under two names, because swapping one
+   for the other is what starts a ghost's fade over when it is used again. */
+.pong-trail > * {
+  opacity: 0;
+}
+
+.pong-trail-fade {
+  animation: pong-trail-fade var(--pong-trail-duration) linear;
+}
+
+.pong-trail-fade-again {
+  animation: pong-trail-fade-again var(--pong-trail-duration) linear;
+}
+
+@keyframes pong-trail-fade {
+  from {
+    opacity: var(--pong-trail-opacity);
+  }
+
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes pong-trail-fade-again {
+  from {
+    opacity: var(--pong-trail-opacity);
+  }
+
+  to {
+    opacity: 0;
+  }
+}
+
+/* The ball is a window onto this gradient: the engine stretches it from the
+   ball's width to the court's and slides it opposite the ball, so it stays
+   put on the court while the ball moves across it. */
+.pong-ball-color {
+  width: 100%;
+  height: 100%;
+  background-image: linear-gradient(to right, var(--pong-ball-left-color), var(--pong-ball-right-color));
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+.pong-paddle {
+  position: absolute;
+  top: calc(50% - var(--pong-paddle-height) / 2);
+  width: var(--pong-paddle-width);
+  height: var(--pong-paddle-height);
+  will-change: transform;
+}
+
+.pong-paddle-left {
+  left: 0;
+  background-color: var(--pong-paddle-left-color);
+}
+
+.pong-paddle-right {
+  right: 0;
+  background-color: var(--pong-paddle-right-color);
+}
+
+/* A paddle glows on the impossible difficulty (.pong-paddle-pulsing, the
+   AI's) and one point from winning (.pong-paddle-game-point, either's). Which
+   color it glows in, --pong-paddle-glow, is worked out here from the two. */
+.pong-paddle-pulsing,
+.pong-paddle-game-point {
+  animation: pong-paddle-pulse var(--pong-paddle-pulse-duration) ease-in-out infinite alternate;
+}
+
+.pong-paddle-left.pong-paddle-game-point {
+  --pong-paddle-glow: var(--pong-paddle-left-glow-color, var(--pong-paddle-left-color));
+}
+
+.pong-paddle-right.pong-paddle-game-point {
+  --pong-paddle-glow: var(--pong-paddle-right-glow-color, var(--pong-paddle-right-color));
+}
+
+/* The eye: the paddle's own color where a hotter shade can't be worked out. */
+.pong-paddle-left.pong-paddle-pulsing {
+  --pong-paddle-glow: var(--pong-paddle-pulse-color, var(--pong-paddle-left-color));
+}
+
+.pong-paddle-right.pong-paddle-pulsing {
+  --pong-paddle-glow: var(--pong-paddle-pulse-color, var(--pong-paddle-right-color));
+}
+
+/* Lighter and more vivid, in the same hue: the default maroon comes out as
+   the red-hot #ff2a1a, near enough, and a gray paddle stays gray. */
+@supports (color: oklch(from red l c h)) {
+  .pong-paddle-left.pong-paddle-pulsing {
+    --pong-paddle-glow: var(
+      --pong-paddle-pulse-color,
+      oklch(from var(--pong-paddle-left-color) calc(l + 0.17) calc(c * 1.4) h)
+    );
+  }
+
+  .pong-paddle-right.pong-paddle-pulsing {
+    --pong-paddle-glow: var(
+      --pong-paddle-pulse-color,
+      oklch(from var(--pong-paddle-right-color) calc(l + 0.17) calc(c * 1.4) h)
+    );
+  }
+}
+
+.pong-paddle-pulsing.pong-paddle-game-point {
+  --pong-paddle-glow: var(--pong-paddle-pulse-game-point-color);
+}
+
+/* A steady swell in and out, from the paddle's own color to the glow's. Even
+   at its lowest the paddle keeps a faint glow, sized like the full one by
+   the paddle's width. */
+@keyframes pong-paddle-pulse {
+  from {
+    box-shadow:
+      0 0 calc(var(--pong-paddle-width) * 0.6) 0 var(--pong-paddle-glow);
+  }
+
+  to {
+    background-color: var(--pong-paddle-glow);
+    box-shadow:
+      0 0 calc(var(--pong-paddle-width) * 2.4) calc(var(--pong-paddle-width) * 0.6) var(--pong-paddle-glow);
+  }
+}
+
+/* A point with no size, which the engine moves to where the ball met a
+   paddle. Its two rings are centered on it, and grow and fade each time the
+   engine adds .pong-ripple-active. */
+.pong-ripple {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+.pong-ripple-left {
+  color: var(--pong-ripple-left-color);
+}
+
+.pong-ripple-right {
+  color: var(--pong-ripple-right-color);
+}
+
+.pong-ripple::before,
+.pong-ripple::after {
+  position: absolute;
+  top: calc(var(--pong-ripple-size) / -2);
+  left: calc(var(--pong-ripple-size) / -2);
+  box-sizing: border-box;
+  width: var(--pong-ripple-size);
+  height: var(--pong-ripple-size);
+  content: '';
+  border: var(--pong-ripple-width) solid currentcolor;
+  border-radius: 50%;
+  opacity: 0;
+}
+
+.pong-ripple-active::before,
+.pong-ripple-active::after {
+  animation: pong-ripple var(--pong-ripple-duration) ease-out backwards;
+}
+
+/* The second ring sets off a little after the first. */
+.pong-ripple-active::after {
+  animation-delay: calc(var(--pong-ripple-duration) / 4);
+}
+
+@keyframes pong-ripple {
+  from {
+    opacity: 0.7;
+    transform: scale(0.1);
+  }
+
+  to {
+    opacity: 0;
+    transform: scale(1);
+  }
+}
+
+/* Sized in em, so --pong-score-size scales the whole score. */
+.pong-score {
+  position: absolute;
+  bottom: 0.2em;
+  left: 50%;
+  display: flex;
+  gap: 0.2em;
+  align-items: flex-start;
+  height: 1em;
+  font-size: var(--pong-score-size);
+  line-height: 1;
+  color: var(--pong-muted);
+  transform: translateX(-50%);
+}
+
+.pong-score-side {
+  width: 1.2em;
+  text-align: center;
+  transition: color 0.3s, transform 0.3s;
+}
+
+.pong-score-divider {
+  font-size: 0.44em;
+  font-weight: var(--pong-font-weight-bold);
+  line-height: 1.95;
+}
+
+.pong-score-winner {
+  color: var(--pong-color);
+  transform: scale(1.5);
+}
+
+/* One line where it fits, wrapped where the court is narrow. */
+.pong-message {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: max-content;
+  max-width: 90%;
+  margin: 0;
+  font-size: var(--pong-message-size);
+  color: var(--pong-message-color);
+  text-align: center;
+  transition: opacity 1s;
+  transform: translate(-50%, -50%);
+}
+
+.pong-message-smack {
+  color: var(--pong-smack-color);
+}
+
+.pong-message-hidden {
+  opacity: 0;
+}
+
+.pong-hint {
+  display: block;
+  font-size: var(--pong-hint-size);
+  color: var(--pong-muted);
+  text-align: right;
+  text-transform: uppercase;
+}
+
+/* The difficulty and, under it, the help hint, just above the score. The gap
+   below clears the winner's scaled-up score. */
+.pong-help-hints {
+  position: absolute;
+  bottom: calc(var(--pong-score-size) * 1.2 + 1.5em);
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5em;
+  width: max-content;
+  max-width: 90%;
+  font-size: var(--pong-hint-size);
+  transform: translateX(-50%);
+}
+
+.pong-help-hints .pong-hint {
+  margin: 0;
+  text-align: center;
+}
+
+.pong-difficulty {
+  font-weight: var(--pong-font-weight-bold);
+}
+
+.pong-difficulty-easy {
+  color: var(--pong-difficulty-easy-color);
+}
+
+.pong-difficulty-normal {
+  color: var(--pong-difficulty-normal-color);
+}
+
+.pong-difficulty-hard {
+  color: var(--pong-difficulty-hard-color);
+}
+
+.pong-difficulty-impossible {
+  color: var(--pong-difficulty-impossible-color);
+}
+
+/* Laid over the court, ball and paddles included. Clicks pass through it, so
+   a click anywhere still focuses the court. */
+.pong-help {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5em;
+  align-items: center;
+  justify-content: center;
+  padding: 1em;
+  font-size: var(--pong-help-size);
+  font-weight: var(--pong-help-font-weight);
+  line-height: 1.4;
+  color: var(--pong-help-color);
+  pointer-events: none;
+  background-color: var(--pong-help-background);
+  transition: opacity 0.2s, visibility 0.2s;
+}
+
+.pong-help-hidden {
+  visibility: hidden;
+  opacity: 0;
+}
+
+/* The score to play to heads the help, with the number picked out. */
+.pong-help-goal {
+  margin: 0;
+  font-size: 1.75em;
+  font-weight: var(--pong-font-weight);
+  line-height: 1;
+  color: var(--pong-color);
+}
+
+.pong-help-goal-score {
+  font-weight: var(--pong-font-weight-bold);
+}
+
+/* In the help, hints scale with its text and share its weight. */
+.pong-help .pong-hint {
+  margin: 0;
+  font-size: 0.75em;
+}
+
+/* One grid for the keys and the advanced section under them, so their
+   columns line up: a key or a term, then what it does. */
+.pong-help-list {
+  display: grid;
+  grid-template-columns: auto minmax(0, 24em);
+  gap: 0.75em 1.5em;
+  align-items: baseline;
+}
+
+.pong-help-keys,
+.pong-help-tips,
+.pong-help-row {
+  display: contents;
+}
+
+.pong-help-key {
+  display: flex;
+  gap: 0.4em;
+  justify-content: flex-end;
+}
+
+.pong-help-cap {
+  box-sizing: border-box;
+  min-width: 2em;
+  padding: 0.2em 0.5em;
+  font: inherit;
+  line-height: 1.2;
+  color: var(--pong-color);
+  text-align: center;
+  border: 1px solid currentcolor;
+  border-radius: 0.3em;
+}
+
+.pong-help-action {
+  margin: 0;
+}
+
+/* The advanced section's heading spans both columns, between two rules. */
+.pong-help .pong-help-heading {
+  display: flex;
+  grid-column: 1 / -1;
+  gap: 1em;
+  align-items: center;
+  margin-top: 0.75em;
+}
+
+.pong-help-heading::before,
+.pong-help-heading::after {
+  flex: 1;
+  content: '';
+  border-top: 1px solid currentcolor;
+}
+
+.pong-help-term {
+  font-weight: var(--pong-font-weight-bold);
+  color: var(--pong-color);
+  text-align: right;
+}
+
+/* The count before the first serve, under the name of whoever serves it. */
+.pong-countdown {
+  display: block;
+  font-weight: var(--pong-font-weight-bold);
+  color: var(--pong-color);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pong-score-side,
+  .pong-message,
+  .pong-help {
+    transition: none;
+  }
+
+  .pong-ripple,
+  .pong-trail {
+    display: none;
+  }
+
+  .pong-paddle-pulsing,
+  .pong-paddle-game-point {
+    animation: none;
+  }
+}
