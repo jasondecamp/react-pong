@@ -1,0 +1,24 @@
+// The two-player server: a Cloudflare Worker, with one Durable Object for each
+// lobby and one that hands out the lobbies' codes.
+{
+  "name": "react-pong-server",
+  "main": "worker.ts",
+  "compatibility_date": "2026-11-01",
+  // Wrangler sends Cloudflare no usage telemetry from this project.
+  "send_metrics": false,
+  "durable_objects": {
+    "bindings": [
+      { "name": "LOBBY", "class_name": "Lobby" },
+      { "name": "DIRECTORY", "class_name": "Directory" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["Lobby", "Directory"] }
+  ],
+  "vars": {
+    // The pages whose games may connect, as origins separated by commas.
+    "ALLOWED_ORIGINS": "https://pong.fourfightingfoxes.com,http://localhost:5318",
+    // How many lobbies may be open at once.
+    "MAX_LOBBIES": "200"
+  }
+}

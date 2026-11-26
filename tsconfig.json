@@ -23,5 +23,7 @@
       "react-pong/styles.css": ["./src/styles.css"]
     }
   },
-  "include": ["src", "demo", "*.config.ts", "vitest.setup.ts"]
+  "include": ["src", "demo", "server", "*.config.ts", "vitest.setup.ts"],
+  // The Cloudflare adapter is checked by server/tsconfig.json, against the Workers runtime's types.
+  "exclude": ["server/worker.ts"]
 }
