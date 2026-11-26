@@ -66,7 +66,34 @@ export type SimulationState = {
   winner: Side | null;
   /** The start screen is playing itself: both paddles are the AI's, and nothing scores. */
   attract: boolean;
+  /**
+   * The left paddle is another player's, in another browser. Nothing here
+   * plays it: it moves as that player reports, and that player decides
+   * whether it met a ball heading its way.
+   */
+  remote: boolean;
+  /**
+   * In a game against a remote player, the ball has gone as far as this side
+   * can take it, and is waiting to hear from the other: for their serve, or
+   * for whether their paddle met it.
+   */
+  awaiting: boolean;
 };
+
+/** A ball as one player reports it to the other: where it is and how it is moving. */
+export type BallReport = {
+  x: number;
+  y: number;
+  speed: number;
+  heading: -1 | 1;
+  angle: number;
+};
+
+/**
+ * Why a ball is reported: it was served, a paddle hit it (`contactY` is where,
+ * down the court), or the two players are only agreeing on where it is.
+ */
+export type BallReportKind = 'serve' | 'hit' | 'sync';
 
 export type SimulationOptions = {
   winningScore: number;
@@ -90,14 +117,40 @@ export type Simulation = {
     paddleWidth: number,
     paddleHeight: number,
   ) => void;
-  /** Serve at once, from the start screen or between points. */
-  serve: () => void;
+  /**
+   * Serve at once, from the start screen or between points, and say whether
+   * a ball left. Against a remote player only this side's own serves do: the
+   * other's arrive through `remoteBall`.
+   */
+  serve: () => boolean;
   /**
    * From the start screen, toss for the first serve: the ball bounces between
    * the paddles (unless `animate` is false) and comes to rest on the side that
-   * won it, a countdown runs, and the ball is served.
+   * won it, a countdown runs, and the ball is served. The toss goes to
+   * `server` if one is given, as it is against a remote player, whose game
+   * has to settle on the same side.
    */
-  toss: (animate: boolean) => void;
+  toss: (animate: boolean, server?: Side) => void;
+  /**
+   * Play against a remote player (`true`) or the AI (`false`). Set it on the
+   * start screen, before the match.
+   */
+  setRemote: (remote: boolean) => void;
+  /**
+   * The remote player's paddle, as they reported it: its top edge, the way it
+   * was moving, and for how long. The next step takes it in, carried forward
+   * by `age`, the seconds from the report to the end of that step.
+   */
+  remotePaddle: (y: number, direction: Direction, held: number, age: number) => void;
+  /**
+   * A ball as the remote player reported it, already turned to this side's
+   * view. It takes the place of this side's ball at the next step, carried
+   * forward along its path by `age`, the seconds from the report to the end
+   * of that step.
+   */
+  remoteBall: (ball: BallReport, kind: BallReportKind, contactY: number, age: number) => void;
+  /** The remote player's paddle missed the ball: the point is this side's, at the next step. */
+  remoteMiss: () => void;
   pause: () => void;
   resume: () => void;
   reset: () => void;
@@ -147,6 +200,9 @@ const hitJitter = 3 * degrees;
 const maxAngle = 70 * degrees;
 // Wall and paddle bounces resolved in one step; more than enough for 50ms.
 const maxBounces = 8;
+// A report from a remote player is never carried forward by more than this
+// many seconds: a staler one is a connection problem, not a game to catch up.
+const maxAge = 1;
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
@@ -174,8 +230,24 @@ export const createSimulation = (random: () => number): Simulation => {
     scorer: null,
     winner: null,
     attract: false,
+    remote: false,
+    awaiting: false,
   };
   const events: SimulationEvent[] = [];
+  // What the remote player has reported since the last step, which the next one takes in.
+  const inbox = {
+    ball: { x: 0, y: 0, speed: 0, heading: 1 as -1 | 1, angle: 0 },
+    hasBall: false,
+    kind: 'sync' as BallReportKind,
+    contactY: 0,
+    age: 0,
+    miss: false,
+    hasPaddle: false,
+    paddleY: 0,
+    paddleDirection: 0 as Direction,
+    paddleHeld: 0,
+    paddleAge: 0,
+  };
   let ai = aiProfiles.normal;
   let winningScore = 11;
   // For each paddle the AI plays: the seconds since it last decided, and
@@ -269,7 +341,8 @@ export const createSimulation = (random: () => number): Simulation => {
     ball.angle = (random() * 2 - 1) * maxServeAngle;
     state.server = server;
     state.countdown = 0;
-    brief('left', server);
+    state.awaiting = false;
+    if (!state.remote) brief('left', server);
     if (state.attract) brief('right', server);
     else state.phase = 'rally';
     missed = false;
@@ -294,6 +367,11 @@ export const createSimulation = (random: () => number): Simulation => {
     const count = countFrom - Math.floor(Math.max(0, tossClock - tossDuration) / countInterval);
     if (tossClock < tossDuration) {
       placeTossed(tossClock);
+    } else if (count <= 0 && state.remote && server === 'left') {
+      // The remote player serves: the ball stays on their paddle until their serve arrives.
+      placeTossed(tossDuration);
+      state.phase = 'rally';
+      state.awaiting = true;
     } else if (count <= 0) {
       launch(server);
       events.push('serve');
@@ -332,7 +410,8 @@ export const createSimulation = (random: () => number): Simulation => {
     // Scoring earns the next serve.
     state.server = scorer;
     state.ball.speed = 0;
-    dismiss('left');
+    state.awaiting = false;
+    if (!state.remote) dismiss('left');
     events.push('point');
     if (state.scores[scorer] >= winningScore) {
       state.phase = 'gameOver';
@@ -356,8 +435,8 @@ export const createSimulation = (random: () => number): Simulation => {
     // Having sent the ball away, an AI decides at once where to wait for it.
     // With the ball on its way to it, an AI decides how to return it.
     const receiver: Side = side === 'left' ? 'right' : 'left';
-    if (side === 'left' || state.attract) state[side].target = aiTarget(state, side, ai, random);
-    if (receiver === 'left' || state.attract) {
+    if ((side === 'left' && !state.remote) || state.attract) state[side].target = aiTarget(state, side, ai, random);
+    if ((receiver === 'left' && !state.remote) || state.attract) {
       state[receiver].aim = aiAim(ai, random);
       state[receiver].shot = aiShot(state, receiver, ai, random);
     }
@@ -432,14 +511,16 @@ export const createSimulation = (random: () => number): Simulation => {
   // Swept: the ball travels to whichever comes first of a wall, the face of
   // the paddle it is heading for, or the edge behind that paddle, and carries
   // on from there with the time left. The paddles have already moved, so each
-  // is placed where it was at the moment the ball reached it.
+  // is placed where it was at the moment the ball reached it. A remote
+  // player's paddle is theirs to judge: a ball heading for it carries on past
+  // its face and off the court, and waits there for their word.
   const moveBall = (dt: number, leftBefore: number, rightBefore: number) => {
     const { ball } = state;
     const maxY = state.height - state.ballHeight;
     const leftFace = state.paddleWidth;
     const rightFace = state.width - state.paddleWidth - state.ballWidth;
     let remaining = dt;
-    for (let bounce = 0; bounce < maxBounces && remaining > 0 && ball.speed > 0 && inPlay(); bounce++) {
+    for (let bounce = 0; bounce < maxBounces && remaining > 0 && ball.speed > 0 && !state.awaiting && inPlay(); bounce++) {
       const vx = ball.heading * ball.speed * Math.cos(ball.angle);
       const vy = ball.speed * Math.sin(ball.angle);
       let time = remaining;
@@ -453,8 +534,10 @@ export const createSimulation = (random: () => number): Simulation => {
       }
       const heading: Side = ball.heading === -1 ? 'left' : 'right';
       const face = heading === 'left' ? leftFace : rightFace;
-      const edge = heading === 'left' ? 0 : state.width - state.ballWidth;
-      const target = missed ? edge : face;
+      const theirs = state.remote && heading === 'left';
+      let edge = state.width - state.ballWidth;
+      if (heading === 'left') edge = theirs ? -state.ballWidth : 0;
+      const target = missed || theirs ? edge : face;
       let reached = false;
       const fromX = ball.x;
       const fromY = ball.y;
@@ -474,7 +557,7 @@ export const createSimulation = (random: () => number): Simulation => {
       // Where the paddle's top edge was when this stretch began, and where it is at its end.
       const paddleFrom = before + (paddle.y - before) * ((dt - remaining - time) / dt);
       const paddleTo = before + (paddle.y - before) * ((dt - remaining) / dt);
-      const caught = missed ? caughtAt(fromY - paddleFrom, ball.y - paddleTo) : -1;
+      const caught = missed && !theirs ? caughtAt(fromY - paddleFrom, ball.y - paddleTo) : -1;
       if (caught >= 0) {
         // Behind the face, the top or bottom end of the paddle has met the
         // ball, which goes back from where they touched as steeply as it can.
@@ -493,7 +576,9 @@ export const createSimulation = (random: () => number): Simulation => {
         events.push('wall');
       } else if (reached) {
         ball.x = target;
-        if (missed && state.attract) {
+        if (theirs) {
+          state.awaiting = true;
+        } else if (missed && state.attract) {
           // Nothing scores in attract mode: the side that would have serves the next ball.
           state.server = heading === 'left' ? 'right' : 'left';
           parkBall();
@@ -505,6 +590,61 @@ export const createSimulation = (random: () => number): Simulation => {
         }
       }
     }
+  };
+
+  /** Take in the remote player's paddle, if they have reported it since the last step, and say whether they had. */
+  const takePaddle = () => {
+    if (!inbox.hasPaddle) return false;
+    inbox.hasPaddle = false;
+    const { left } = state;
+    left.y = clamp(inbox.paddleY, 0, Math.max(0, state.height - state.paddleHeight));
+    left.direction = inbox.paddleDirection;
+    left.held = Math.min(Math.max(0, inbox.paddleHeld), maxHold);
+    movePaddle(left, Math.min(inbox.paddleAge, maxAge), null);
+    return true;
+  };
+
+  /**
+   * Take in the ball or the miss the remote player has reported since the
+   * last step, and say whether a ball was: it has then been carried to the
+   * end of this step already.
+   */
+  const takeBall = () => {
+    if (inbox.miss) {
+      inbox.miss = false;
+      inbox.hasBall = false;
+      if (state.phase === 'rally') point('right');
+      return false;
+    }
+    if (!inbox.hasBall) return false;
+    inbox.hasBall = false;
+    const { ball, contact } = state;
+    const serve = inbox.kind === 'serve';
+    // A serve starts a rally from the toss or between points; anything else belongs to one under way.
+    if (serve ? state.phase !== 'toss' && state.phase !== 'between' && state.phase !== 'rally' : state.phase !== 'rally') return false;
+    ball.x = inbox.ball.x;
+    ball.y = clamp(inbox.ball.y, 0, Math.max(0, state.height - state.ballHeight));
+    ball.speed = inbox.ball.speed;
+    ball.heading = inbox.ball.heading;
+    ball.angle = inbox.ball.angle;
+    state.awaiting = false;
+    missed = false;
+    if (serve) {
+      state.phase = 'rally';
+      state.server = 'left';
+      state.countdown = 0;
+      events.push('serve');
+    } else if (inbox.kind === 'hit') {
+      contact.side = 'left';
+      contact.x = state.paddleWidth;
+      contact.y = inbox.contactY;
+      events.push('paddle');
+    }
+    // Carry it forward to the end of this step. The paddles stay where the step has put them.
+    for (let rest = Math.min(inbox.age, maxAge); rest > 0; rest -= maxDt) {
+      moveBall(Math.min(rest, maxDt), state.left.y, state.right.y);
+    }
+    return true;
   };
 
   return {
@@ -548,21 +688,61 @@ export const createSimulation = (random: () => number): Simulation => {
     },
 
     serve: () => {
-      if (state.phase !== 'start' && state.phase !== 'between') return;
-      if (state.width <= 0 || state.height <= 0) return;
+      if (state.phase !== 'start' && state.phase !== 'between') return false;
+      if (state.width <= 0 || state.height <= 0) return false;
+      // Against a remote player, their serves are theirs to make.
+      if (state.remote && state.server !== 'right') return false;
       if (state.attract) endAttract();
       launch(state.server ?? (random() < 0.5 ? 'left' : 'right'));
+      return true;
     },
 
-    toss: (animate) => {
+    toss: (animate, server) => {
       if (state.phase !== 'start' || state.width <= 0 || state.height <= 0) return;
       if (state.attract) endAttract();
-      state.server = random() < 0.5 ? 'left' : 'right';
+      state.server = server ?? (random() < 0.5 ? 'left' : 'right');
       state.phase = 'toss';
       state.countdown = 0;
       state.ball.speed = 0;
       tossClock = animate ? 0 : tossDuration;
       placeTossed(tossClock);
+    },
+
+    setRemote: (remote) => {
+      if (state.remote === remote) return;
+      if (state.attract) endAttract();
+      state.remote = remote;
+      state.awaiting = false;
+      inbox.hasBall = false;
+      inbox.miss = false;
+      inbox.hasPaddle = false;
+      dismiss('left');
+    },
+
+    remotePaddle: (y, direction, held, age) => {
+      if (!state.remote) return;
+      inbox.hasPaddle = true;
+      inbox.paddleY = y;
+      inbox.paddleDirection = direction;
+      inbox.paddleHeld = held;
+      inbox.paddleAge = Math.max(0, age);
+    },
+
+    remoteBall: (ball, kind, contactY, age) => {
+      if (!state.remote) return;
+      inbox.ball.x = ball.x;
+      inbox.ball.y = ball.y;
+      inbox.ball.speed = ball.speed;
+      inbox.ball.heading = ball.heading;
+      inbox.ball.angle = ball.angle;
+      inbox.hasBall = true;
+      inbox.kind = kind;
+      inbox.contactY = contactY;
+      inbox.age = Math.max(0, age);
+    },
+
+    remoteMiss: () => {
+      if (state.remote) inbox.miss = true;
     },
 
     pause: () => {
@@ -582,6 +762,10 @@ export const createSimulation = (random: () => number): Simulation => {
       state.scorer = null;
       state.winner = null;
       state.attract = false;
+      state.awaiting = false;
+      inbox.hasBall = false;
+      inbox.miss = false;
+      inbox.hasPaddle = false;
       dismiss('left');
       dismiss('right');
       parkBall();
@@ -594,7 +778,7 @@ export const createSimulation = (random: () => number): Simulation => {
       if (!(elapsed > 0)) return events;
       const leftBefore = state.left.y;
       const rightBefore = state.right.y;
-      if (state.phase === 'start' && attractWanted && !state.attract) {
+      if (state.phase === 'start' && attractWanted && !state.attract && !state.remote) {
         state.attract = true;
         attractClock = 0;
       }
@@ -609,11 +793,17 @@ export const createSimulation = (random: () => number): Simulation => {
       const playing = inPlay();
       // In attract mode the AI has the right paddle too, and the keys do nothing.
       if (!state.attract) steer(state.right, input);
-      if (playing) think('left', elapsed);
+      // A remote player's paddle carries on the way they last reported it moving.
+      const aiLeft = playing && !state.remote;
+      if (aiLeft) think('left', elapsed);
       if (state.attract) think('right', elapsed);
-      movePaddle(state.left, elapsed, playing ? aiDestination(state, 'left', ai) : null);
+      // A paddle or ball they have just reported is carried to the end of this step as it is taken in.
+      if (!(state.remote && takePaddle())) {
+        movePaddle(state.left, elapsed, aiLeft ? aiDestination(state, 'left', ai) : null);
+      }
       movePaddle(state.right, elapsed, state.attract ? aiDestination(state, 'right', ai) : null);
-      if (playing) moveBall(elapsed, leftBefore, rightBefore);
+      if (state.remote && takeBall()) return events;
+      if (inPlay()) moveBall(elapsed, leftBefore, rightBefore);
       else if (state.phase === 'toss') stepToss(elapsed);
       return events;
     },
