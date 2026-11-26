@@ -101,7 +101,7 @@ export const createNetLink = (simulation: Simulation, send: (message: NetMessage
         else if (event === 'point' && state.scorer === 'left') missed = true;
       }
       // A ball this side hit and then lost within one step is only a miss to the other.
-      if (missed) send({ type: 'miss' });
+      if (missed) send({ type: 'miss', x: state.ball.x, y: state.ball.y });
       else if (served) sendBall('serve');
       else if (hit) sendBall('hit');
     },
@@ -118,7 +118,9 @@ export const createNetLink = (simulation: Simulation, send: (message: NetMessage
 
     receive: (message, age) => {
       if (message.type === 'miss') {
-        simulation.remoteMiss();
+        // An older game says only that it missed: the ball then stops where this side has it.
+        const known = Number.isFinite(message.x) && Number.isFinite(message.y);
+        simulation.remoteMiss(known ? state.width - state.ballWidth - message.x : state.ball.x, known ? message.y : state.ball.y);
       } else if (message.type === 'paddle') {
         simulation.remotePaddle(message.y, message.direction, message.held, age);
       } else {

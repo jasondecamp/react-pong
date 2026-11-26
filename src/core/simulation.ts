@@ -163,8 +163,12 @@ export type Simulation = {
    * of that step.
    */
   remoteBall: (ball: BallReport, kind: BallReportKind, contactY: number, age: number) => void;
-  /** The remote player's paddle missed the ball: the point is this side's, at the next step. */
-  remoteMiss: () => void;
+  /**
+   * The remote player's paddle missed the ball: the point is this side's, at
+   * the next step, with the ball left at `x`, `y`, where it came to rest for
+   * them, already turned to this side's view.
+   */
+  remoteMiss: (x: number, y: number) => void;
   pause: () => void;
   resume: () => void;
   reset: () => void;
@@ -273,6 +277,8 @@ export const createSimulation = (random: () => number): Simulation => {
     contactY: 0,
     age: 0,
     miss: false,
+    missX: 0,
+    missY: 0,
   };
   // The remote player's paddle reports not yet shown, oldest first from
   // `paddleNext`: a ring, so that taking them in allocates nothing. `due` is
@@ -682,7 +688,12 @@ export const createSimulation = (random: () => number): Simulation => {
       inbox.miss = false;
       inbox.hasBall = false;
       state.predicted = false;
-      if (state.phase === 'rally') point('right');
+      if (state.phase === 'rally') {
+        // Where it ended up for them, wherever this side's guesses had taken it.
+        state.ball.x = clamp(inbox.missX, -state.ballWidth, state.width);
+        state.ball.y = clamp(inbox.missY, 0, Math.max(0, state.height - state.ballHeight));
+        point('right');
+      }
       return false;
     }
     if (!inbox.hasBall) return false;
@@ -823,8 +834,11 @@ export const createSimulation = (random: () => number): Simulation => {
       inbox.age = Math.max(0, age);
     },
 
-    remoteMiss: () => {
-      if (state.remote) inbox.miss = true;
+    remoteMiss: (x, y) => {
+      if (!state.remote) return;
+      inbox.miss = true;
+      inbox.missX = x;
+      inbox.missY = y;
     },
 
     pause: () => {

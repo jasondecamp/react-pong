@@ -145,6 +145,9 @@ describe('a match between two games', () => {
     expect(a.simulation.state.scores.right).toBe(b.simulation.state.scores.left);
     expect(a.simulation.state.scorer).toBe('left');
     expect(b.simulation.state.scorer).toBe('right');
+    // The ball stopped in the same place for both: past a's paddle.
+    expect(mirrored(b.simulation)).toBeCloseTo(a.simulation.state.ball.x, 4);
+    expect(b.simulation.state.ball.y).toBeCloseTo(a.simulation.state.ball.y, 4);
   });
 
   it('plays a whole match to the same score and winner', () => {
@@ -297,9 +300,12 @@ describe('a game against a remote player', () => {
     const { state } = simulation;
     toTheirEnd(simulation, true);
     expect(state.predicted).toBe(true);
-    simulation.remoteMiss();
+    // For them it went on past the paddle to the edge of the court.
+    simulation.remoteMiss(0, 400);
     expect(simulation.step(frame, 0)).toContain('point');
     expect(state.predicted).toBe(false);
+    expect(state.ball.x).toBe(0);
+    expect(state.ball.y).toBe(400);
     expect(state.scores).toEqual({ left: 0, right: 1 });
   });
 
@@ -338,7 +344,7 @@ describe('a game against a remote player', () => {
     simulation.setRemote(false);
     const { y } = simulation.state.left;
     simulation.remotePaddle(10, 1, 0, 0);
-    simulation.remoteMiss();
+    simulation.remoteMiss(0, 0);
     simulation.step(frame, 0);
     expect(simulation.state.left.y).toBe(y);
     expect(simulation.state.scores).toEqual({ left: 0, right: 0 });

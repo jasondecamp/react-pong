@@ -23,7 +23,7 @@ const serve: ClientMessage = {
   time: 0,
   message: { type: 'ball', kind: 'serve', x: 1170, y: 300, speed: 780, heading: -1, angle: 0.1, contactY: 300 },
 };
-const miss: ClientMessage = { type: 'game', time: 0, message: { type: 'miss' } };
+const miss: ClientMessage = { type: 'game', time: 0, message: { type: 'miss', x: 0, y: 0 } };
 
 /** A room on a host the test controls: a clock it moves, and a record of everything sent, closed, and saved. */
 const setup = (saved?: RoomState) => {
