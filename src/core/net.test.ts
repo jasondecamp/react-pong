@@ -128,7 +128,7 @@ describe('a match between two games', () => {
     // Player a served. With messages this slow, the ball reaches b's side of a's court before b's hit is heard of.
     run(3, () => a.simulation.state.awaiting);
     expect(a.simulation.state.awaiting).toBe(true);
-    expect(a.simulation.state.ball.x).toBe(-a.simulation.state.ballWidth);
+    expect(a.simulation.state.ball.x).toBe(0);
     expect(a.simulation.state.scores).toEqual({ left: 0, right: 0 });
     run(0.5, () => !a.simulation.state.awaiting);
     expect(a.simulation.state.ball.heading).toBe(1);
@@ -330,7 +330,7 @@ describe('a game against a remote player', () => {
     expect(toTheirEnd(simulation, false)).toBe(0);
     expect(state.awaiting).toBe(true);
     expect(state.predicted).toBe(false);
-    expect(state.ball.x).toBe(-state.ballWidth);
+    expect(state.ball.x).toBe(0);
     expect(state.scores).toEqual({ left: 0, right: 0 });
     // They did reach it: their hit is news here.
     simulation.remoteBall({ x: 100, y: 300, speed: 500, heading: 1, angle: 0 }, 'hit', 310, 0);

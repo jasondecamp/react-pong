@@ -562,7 +562,8 @@ export const createSimulation = (random: () => number): Simulation => {
   // is placed where it was at the moment the ball reached it. A remote
   // player's paddle is theirs to judge. Until their word arrives, a ball that
   // meets it as it shows here comes back on a guess, and one that doesn't
-  // carries on off the court and waits there.
+  // carries on to the edge of the court and waits there, where it will lie
+  // if their word is that it was a miss.
   const moveBall = (dt: number, leftBefore: number, rightBefore: number) => {
     const { ball } = state;
     const maxY = state.height - state.ballHeight;
@@ -584,8 +585,7 @@ export const createSimulation = (random: () => number): Simulation => {
       const heading: Side = ball.heading === -1 ? 'left' : 'right';
       const face = heading === 'left' ? leftFace : rightFace;
       const theirs = state.remote && heading === 'left';
-      let edge = state.width - state.ballWidth;
-      if (heading === 'left') edge = theirs ? -state.ballWidth : 0;
+      const edge = heading === 'left' ? 0 : state.width - state.ballWidth;
       const target = missed ? edge : face;
       let reached = false;
       const fromX = ball.x;
