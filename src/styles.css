@@ -76,7 +76,7 @@
   /* In a two-player match the court is one standard shape, scaled to fit.
      Where the box is wider or taller than that, this fills what is left
      over. */
-  --pong-bar-color: color-mix(in srgb, var(--pong-muted) 30%, var(--pong-background));
+  --pong-bar-color: color-mix(in srgb, var(--pong-muted) 30%, transparent);
 }
 
 /* The dark palette, for a system set to dark. */
@@ -126,18 +126,20 @@
 }
 
 /* In a two-player lobby the court is the standard one, which the engine sizes
-   this to and places it over: the box around it shows as bars. Unsized, it
-   is nothing. During a match the engine also sets the ball's and paddles'
-   width and height, to draw them at the standard court's scale. */
+   this to and places it over. The box around it shows as bars: this element's
+   shadow, which the court clips. The bars are a tint and not a fill, because
+   the court is stacked over the score and the message, and anything of theirs
+   that lands in a bar has to show through. Unsized, it is nothing. During a
+   match the engine also sets the ball's and paddles' width and height, to
+   draw them at the standard court's scale. */
 .pong-frame {
   position: absolute;
   top: 0;
   left: 0;
-  background-color: var(--pong-background);
 }
 
-.pong-court-standard {
-  background-color: var(--pong-bar-color);
+.pong-court-standard .pong-frame {
+  box-shadow: 0 0 0 100vmax var(--pong-bar-color);
 }
 
 /* The engine moves the ball and paddles with inline transforms. Until it

@@ -113,7 +113,7 @@ export const createNetLink = (simulation: Simulation, send: (message: NetMessage
     },
 
     sync: () => {
-      if (state.phase === 'rally' && !state.awaiting) sendBall('sync');
+      if (state.phase === 'rally' && !state.awaiting && !state.predicted) sendBall('sync');
     },
 
     receive: (message, age) => {

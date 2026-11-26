@@ -317,10 +317,10 @@ export const createPong = (elements: PongElements, initialOptions: PongOptions =
     }
     if (twoPlayer) {
       // The standard court sits inside the box, so its paddles come in from the box's edges to the court's.
-      leftPaddle.style.transform = `translate(${round(x)}px, ${round(y + left.y * scale - leftRest)}px)`;
+      leftPaddle.style.transform = `translate(${round(x)}px, ${round(y + (left.y + left.offset) * scale - leftRest)}px)`;
       rightPaddle.style.transform = `translate(${round(-x)}px, ${round(y + right.y * scale - rightRest)}px)`;
     } else {
-      leftPaddle.style.transform = `translateY(${round(left.y - leftRest)}px)`;
+      leftPaddle.style.transform = `translateY(${round(left.y + left.offset - leftRest)}px)`;
       rightPaddle.style.transform = `translateY(${round(right.y - rightRest)}px)`;
     }
   };

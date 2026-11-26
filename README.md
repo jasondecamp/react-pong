@@ -247,7 +247,7 @@ Every color and size is a custom property. Set them on the root, through `<Pong>
 | `--pong-message-size`, `--pong-hint-size` | `52px`, `12px` | |
 | `--pong-difficulty-easy-color`, `--pong-difficulty-normal-color`, `--pong-difficulty-hard-color`, `--pong-difficulty-impossible-color` | `#2a9d5c`, `#d9900a`, `#e0452c`, `#7a2bbf` (dark `#a05ce6`) | The difficulty shown above the score between games. |
 | `--pong-help-background` | `--pong-background` | What the help covers the court with. |
-| `--pong-bar-color` | `--pong-muted` at 30% over the background | In a two-player match, what fills the box around the standard court where the two differ in shape. |
+| `--pong-bar-color` | `--pong-muted` at 30%, see-through | In a two-player match, what tints the box around the standard court where the two differ in shape. Keep it see-through: the score or a hint that lands in a bar shows through it. |
 | `--pong-help-color`, `--pong-help-size`, `--pong-help-font-weight` | `--pong-color` at 80%, `18px`, `400` | The help's text. It is heavier than the game's so that small type stays readable; if you load your own font, load this weight too. |
 
 The message fade, the help's fade, and the winner's scale-up are disabled under `prefers-reduced-motion`.
