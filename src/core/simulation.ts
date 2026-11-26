@@ -784,6 +784,17 @@ export const createSimulation = (random: () => number): Simulation => {
       if (state.phase !== 'start' || state.width <= 0 || state.height <= 0) return;
       if (state.attract) endAttract();
       state.server = server ?? (random() < 0.5 ? 'left' : 'right');
+      if (state.remote) {
+        // Each game has only ever been told of the other's paddle moving, not
+        // where it stood, so a match starts with both in the middle for both.
+        for (const paddle of [state.left, state.right] as const) {
+          paddle.y = Math.max(0, state.height - state.paddleHeight) / 2;
+          paddle.held = 0;
+          paddle.offset = 0;
+        }
+        state.left.direction = 0;
+        paddleCount = 0;
+      }
       state.phase = 'toss';
       state.countdown = 0;
       state.ball.speed = 0;

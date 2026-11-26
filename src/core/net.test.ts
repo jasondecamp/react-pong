@@ -225,6 +225,21 @@ describe('a game against a remote player', () => {
     expect(simulation.state.left.y).toBe((standardCourt.height - standardCourt.paddleHeight) / 2);
   });
 
+  it('starts a match with both paddles in the middle, wherever they were left', () => {
+    const simulation = court();
+    const { left, right } = simulation.state;
+    const middle = (standardCourt.height - standardCourt.paddleHeight) / 2;
+    // The player moved before the match, and the other player's paddle was last shown elsewhere.
+    for (let step = 0; step < 30; step++) simulation.step(frame, 1);
+    simulation.remotePaddle(50, 0, 0, 1);
+    simulation.step(frame, 0);
+    expect(right.y).not.toBe(middle);
+    expect(left.y).toBe(50);
+    simulation.toss(false, 'right');
+    expect(right.y).toBe(middle);
+    expect(left.y).toBe(middle);
+  });
+
   it('shows a reported paddle a moment behind, as it was reported', () => {
     const simulation = court();
     const { left } = simulation.state;

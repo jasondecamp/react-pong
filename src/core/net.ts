@@ -58,6 +58,8 @@ export const createNetLink = (simulation: Simulation, send: (message: NetMessage
   const { state } = simulation;
   let sentDirection: Direction = 0;
   let sinceSent = 0;
+  // The other game hasn't been told where this paddle is yet.
+  let told = false;
   // This side has served since the last report.
   let justServed = false;
   // Reused for every incoming ball, which the simulation copies from.
@@ -81,6 +83,7 @@ export const createNetLink = (simulation: Simulation, send: (message: NetMessage
     const { right } = state;
     sentDirection = right.direction;
     sinceSent = 0;
+    told = true;
     send({ type: 'paddle', y: right.y, direction: right.direction, held: right.held });
   };
 
@@ -88,7 +91,7 @@ export const createNetLink = (simulation: Simulation, send: (message: NetMessage
     report: (events, dt) => {
       const { right } = state;
       sinceSent += dt;
-      if (right.direction !== sentDirection || (right.direction !== 0 && sinceSent >= paddleHeartbeat)) sendPaddle();
+      if (!told || right.direction !== sentDirection || (right.direction !== 0 && sinceSent >= paddleHeartbeat)) sendPaddle();
       let hit = false;
       let served = justServed;
       justServed = false;
