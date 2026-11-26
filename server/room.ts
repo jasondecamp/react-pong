@@ -243,7 +243,8 @@ export const createRoom = (code: string, host: RoomHost, saved?: RoomState): Roo
   };
 
   const relay = (seat: Seat, message: Extract<ClientMessage, { type: 'game' }>) => {
-    if (state.phase !== 'playing') return;
+    // A pause reaches the two games at different moments, so what one sent just before hearing of it still counts.
+    if (state.phase === 'lobby') return;
     const game = message.message;
     if (game.type === 'miss') {
       // A ball can be missed once: a second miss before the next serve is a repeat, or a lie.

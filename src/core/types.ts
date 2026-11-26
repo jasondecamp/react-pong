@@ -1,4 +1,7 @@
-/** A side of the court. The AI plays `left`; the keyboard plays `right`. */
+import type { LobbyFailure } from './lobby.js';
+import type { LobbyNotice, PauseReason } from './protocol.js';
+
+/** A side of the court. The AI, or in a two-player match the other player, plays `left`; the keyboard plays `right`. */
 export type Side = 'left' | 'right';
 
 /**
@@ -23,6 +26,16 @@ export type PongPhase = 'start' | 'toss' | 'rally' | 'paused' | 'between' | 'gam
  * - `paused`: a rally is paused.
  * - `gameOver`: a side just won.
  * - `reset`: serve was pressed after the game ended; only a reset continues.
+ *
+ * And in a two-player match:
+ * - `serve.opponent`: the other player won the toss; `countdown` runs until they serve.
+ * - `toServe.you`, `toServe.opponent`: a point was scored, and the next serve is this player's or the other's.
+ * - `paused.opponent`: the other player paused.
+ * - `away.opponent`: the other player's game lost focus or was hidden.
+ * - `disconnected.opponent`: the other player's connection dropped, and has a little while to come back.
+ * - `reconnecting`: this game's own connection dropped, and it is trying again.
+ * - `resuming`: a pause is over; `countdown` runs until play carries on.
+ * - `won`, `lost`: the match is over.
  */
 export type PongMessageKey =
   | 'start'
@@ -33,7 +46,17 @@ export type PongMessageKey =
   | 'smack.human'
   | 'paused'
   | 'gameOver'
-  | 'reset';
+  | 'reset'
+  | 'serve.opponent'
+  | 'toServe.you'
+  | 'toServe.opponent'
+  | 'paused.opponent'
+  | 'away.opponent'
+  | 'disconnected.opponent'
+  | 'reconnecting'
+  | 'resuming'
+  | 'won'
+  | 'lost';
 
 /**
  * How early the AI reacts to the ball, and how well it places itself between hits. `impossible` has no handicap
@@ -42,12 +65,46 @@ export type PongMessageKey =
 export type PongDifficulty = 'easy' | 'normal' | 'hard' | 'impossible';
 
 /** Something a key can do. */
-export type PongAction = 'up' | 'down' | 'serve' | 'pause' | 'reset' | 'help' | 'difficulty';
+export type PongAction = 'up' | 'down' | 'serve' | 'pause' | 'reset' | 'help' | 'difficulty' | 'lobby';
 
 /** `KeyboardEvent.key` values mapped to the action each performs. */
 export type PongKeys = Record<string, PongAction>;
 
 export type PongScores = { left: number; right: number };
+
+/**
+ * Where this game stands with two-player:
+ * - `idle`: not in a lobby.
+ * - `connecting`: creating or joining one.
+ * - `waiting`: in a lobby, before a match or between two.
+ * - `playing`: in a match.
+ */
+export type PongLobbyStatus = 'idle' | 'connecting' | 'waiting' | 'playing';
+
+/** Two-player, as this game sees it. */
+export type PongLobby = {
+  /** Whether the two-player panel is open over the court. */
+  open: boolean;
+  status: PongLobbyStatus;
+  /** The lobby's code, once in one. */
+  code: string | null;
+  /** The link that brings another player to this lobby, once in one. */
+  link: string | null;
+  /** A code this game was handed to join with, from the page's address or the `lobbyCode` option, for the panel's code field. */
+  invitation: string | null;
+  /** Why the last attempt to create or join a lobby failed, until the next. */
+  error: LobbyFailure | null;
+  /** What last happened to the lobby that the rest doesn't say: the other player left, or a match was abandoned. */
+  notice: LobbyNotice | null;
+  /** This player is ready for a match. */
+  ready: boolean;
+  /** The other player, or `null` while there isn't one. */
+  opponent: { ready: boolean; connected: boolean } | null;
+  /** Points needed to win a match in this lobby, set by whoever created it. */
+  winningScore: number;
+  /** While a match is paused: whose pause it is, and why. Only that player can end it. */
+  pause: { by: 'you' | 'opponent'; reason: PauseReason } | null;
+};
 
 /** A snapshot of the game. A new object replaces it whenever anything in it changes, never per frame. */
 export type PongState = {
@@ -74,6 +131,8 @@ export type PongState = {
   help: boolean;
   /** The keys the court handles right now: the `keys` option with its default filled in. */
   keys: PongKeys;
+  /** Two-player, or `null` when the `server` option isn't set and there is none. */
+  lobby: PongLobby | null;
 };
 
 export type PongPointEvent = {
@@ -131,7 +190,7 @@ export type PongOptions = {
   /**
    * The keys the court handles, as `KeyboardEvent.key` values mapped to actions. Replaces the whole map, and
    * several keys may share an action. Default
-   * `{ ArrowUp: 'up', ArrowDown: 'down', Enter: 'serve', ' ': 'pause', Escape: 'reset', '?': 'help', d: 'difficulty' }`.
+   * `{ ArrowUp: 'up', ArrowDown: 'down', Enter: 'serve', ' ': 'pause', Escape: 'reset', '?': 'help', d: 'difficulty', 2: 'lobby' }`.
    */
   keys?: PongKeys;
   /**
@@ -140,6 +199,23 @@ export type PongOptions = {
    * Default `1.2`.
    */
   paddleSpeed?: number;
+  /**
+   * The two-player server's address, such as `wss://pong.example.workers.dev`. With it, the lobby key opens a panel
+   * for creating a lobby or joining one by its code, and two people in two browsers can play each other. Without
+   * it there is no two-player. A two-player match is played on a standard court scaled to fit, to the lobby
+   * creator's `winningScore`, with no AI, smack talk, or difficulty. Default `null`.
+   */
+  server?: string | null;
+  /**
+   * The link that brings another player to a lobby, given its code. Default: the address of the page the game is
+   * on, with `?pong=<code>`.
+   */
+  lobbyLink?: ((code: string) => string) | null;
+  /**
+   * A lobby code to offer to join, for a page that routes its own links. Default: the `pong` parameter of the
+   * page's address, if it has one.
+   */
+  lobbyCode?: string | null;
   /** Called after every point, including the last. */
   onPoint?: (event: PongPointEvent) => void;
   /** Called when a side reaches the winning score. */
@@ -182,6 +258,12 @@ export type PongElements = {
    * have been, so ten cover the default 0.5 second fade.
    */
   trail?: HTMLElement | null;
+  /**
+   * Optional. An element at the court's top-left corner that the engine sizes and places over the standard court
+   * during a two-player match, so the court's edges show wherever the box is a different shape. `react-pong/styles.css`
+   * hides it otherwise.
+   */
+  frame?: HTMLElement | null;
 };
 
 export type PongInstance = {
@@ -197,6 +279,18 @@ export type PongInstance = {
   openHelp: () => void;
   /** Close the help. A rally it paused stays paused. */
   closeHelp: () => void;
+  /** Open the two-player panel, from the start screen. Does nothing without the `server` option. */
+  openLobby: () => void;
+  /** Close the two-player panel. A lobby is left rather than closed, so this does nothing while in one. */
+  closeLobby: () => void;
+  /** Create a lobby on the server, to this game's `winningScore`, and wait in it for another player. */
+  createLobby: () => void;
+  /** Join the lobby with this code. */
+  joinLobby: (code: string) => void;
+  /** In a lobby: say this player is ready for a match, or no longer is. The match starts when both are. */
+  setReady: (ready: boolean) => void;
+  /** Leave the lobby and return to the single-player start screen, closing the panel. */
+  leaveLobby: () => void;
   /** Merge new options; `undefined` restores a default. */
   update: (options: PongOptions) => void;
   /** The current snapshot. The same object is returned until something in it changes. */

@@ -183,13 +183,19 @@ describe('a match', () => {
 
 describe('pausing', () => {
   it('pauses for both, and says whose pause it is', () => {
-    const { room, lobbyState, host } = playing();
+    const { room, lobbyState } = playing();
     room.message(1, { type: 'pause', reason: 'away' });
     expect(lobbyState(0)).toMatchObject({ phase: 'paused', pause: { by: 'opponent', reason: 'away' } });
     expect(lobbyState(1)).toMatchObject({ phase: 'paused', pause: { by: 'you', reason: 'away' } });
-    const before = host.sent[1].length;
+  });
+
+  it('still passes on what a game sent before it heard of the pause', () => {
+    const { room, last } = playing();
+    room.message(1, { type: 'pause', reason: 'manual' });
     room.message(0, serve);
-    expect(host.sent[1]).toHaveLength(before);
+    expect(last(1)).toEqual(serve);
+    room.message(1, miss);
+    expect(room.state.scores).toEqual([1, 0]);
   });
 
   it('lets only the player who paused resume, with a countdown for both', () => {

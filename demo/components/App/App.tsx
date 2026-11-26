@@ -52,6 +52,10 @@ const snippet = (options: Options, declarations: string[]) => {
   return declarations.length === 0 ? jsx : `${jsx}\n\n.game {\n${declarations.map((line) => `  ${line}`).join('\n')}\n}`;
 };
 
+// The two-player server: the one named when the playground was built, or in development the one
+// `pnpm dev:server` runs. With neither there is no two-player.
+const server = import.meta.env.VITE_PONG_SERVER ?? (import.meta.env.DEV ? 'ws://localhost:8787' : undefined);
+
 // The playground: the game filling the window, as the original's page did,
 // beside a panel of controls for every option and theme property.
 export const App = () => {
@@ -77,11 +81,17 @@ export const App = () => {
       {/* The theme goes through a style sheet: custom properties never go in inline styles. */}
       {declarations.length > 0 && <style>{`.${styles.game} { ${declarations.join(' ')} }`}</style>}
       <div className={styles.stage}>
-        <Pong className={styles.game} {...options} onDifficultyChange={(difficulty) => setOption('difficulty', difficulty)}>
+        <Pong
+          className={styles.game}
+          {...options}
+          server={server}
+          onDifficultyChange={(difficulty) => setOption('difficulty', difficulty)}
+        >
           <Pong.Court autoFocus />
           <Pong.Score />
           <Pong.Message />
           <Pong.Help />
+          <Pong.Lobby />
         </Pong>
         {!panelOpen && (
           <button type='button' className={classNames(styles.button, styles.show)} onClick={() => setPanelOpen(true)}>
