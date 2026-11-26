@@ -222,19 +222,40 @@ describe('a game against a remote player', () => {
     expect(simulation.state.left.y).toBe((standardCourt.height - standardCourt.paddleHeight) / 2);
   });
 
-  it('carries a reported paddle forward by the age of the report', () => {
+  it('shows a reported paddle a moment behind, as it was reported', () => {
     const simulation = court();
-    // Moving down for half a second already, as of a tenth of a second before the end of the step to come.
-    simulation.remotePaddle(100, 1, 0.5, 0.1);
+    const { left } = simulation.state;
+    const rest = left.y;
+    // They have just started down from 100.
+    simulation.remotePaddle(100, 1, 0, 0);
     simulation.step(frame, 0);
-    const { y } = simulation.state.left;
-    expect(y).toBeGreaterThan(100 + standardCourt.height * standardCourt.paddleSpeed * 0.1);
+    expect(left.y).toBe(rest);
+    for (let step = 0; step < 4; step++) simulation.step(frame, 0);
+    expect(left.y).toBeGreaterThan(100);
+    expect(left.y).toBeLessThan(110);
+    // They stop at 200: the paddle here runs on to there, stops, and never passes it.
+    simulation.remotePaddle(200, 0, 0, 0);
+    let furthest = 0;
+    for (let step = 0; step < 10; step++) {
+      simulation.step(frame, 0);
+      furthest = Math.max(furthest, left.y);
+    }
+    expect(furthest).toBe(200);
+    expect(left.y).toBe(200);
+    expect(left.direction).toBe(0);
+  });
+
+  it('carries a report that arrives late forward by how late it is', () => {
+    const simulation = court();
+    const { left } = simulation.state;
+    // Moving down at full speed, as of a quarter of a second before the end of the step to come: later than the paddle is shown behind.
+    simulation.remotePaddle(100, 1, 1, 0.25);
+    simulation.step(frame, 0);
+    expect(left.y).toBeGreaterThan(100 + standardCourt.height * standardCourt.paddleSpeed * 0.1);
+    const { y } = left;
     // With nothing new reported, it carries on the way it was going.
     simulation.step(frame, 0);
-    expect(simulation.state.left.y).toBeGreaterThan(y);
-    simulation.remotePaddle(200, 0, 0, 0.1);
-    simulation.step(frame, 0);
-    expect(simulation.state.left.y).toBe(200);
+    expect(left.y).toBeGreaterThan(y);
   });
 
   /** Win the toss, and step until the serve has left the other player's end, with their paddle kept on or off the ball. */
@@ -300,7 +321,8 @@ describe('a game against a remote player', () => {
     const simulation = court();
     const { left } = simulation.state;
     const shown = left.y;
-    simulation.remotePaddle(shown + 60, 0, 0, 0);
+    // Late enough to be shown at once.
+    simulation.remotePaddle(shown + 60, 0, 0, 0.2);
     simulation.step(frame, 0);
     expect(left.y).toBe(shown + 60);
     expect(left.y + left.offset).toBeCloseTo(shown, 6);

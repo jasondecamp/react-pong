@@ -150,8 +150,10 @@ export type Simulation = {
   setRemote: (remote: boolean) => void;
   /**
    * The remote player's paddle, as they reported it: its top edge, the way it
-   * was moving, and for how long. The next step takes it in, carried forward
-   * by `age`, the seconds from the report to the end of that step.
+   * was moving, and for how long. `age` is the seconds from the report to
+   * the end of the next step. The paddle is shown a constant moment behind
+   * the player, so the report takes effect once it is that old; one that
+   * arrives older is carried forward by the difference.
    */
   remotePaddle: (y: number, direction: Direction, held: number, age: number) => void;
   /**
@@ -219,6 +221,18 @@ const maxAge = 1;
 // they reported it every this many seconds, so that late news of it shows as
 // a quick slide and not a jump.
 const paddleEase = 0.05;
+// A remote player's paddle is shown a constant moment behind them, so that
+// every start and stop they report is replayed as it happened: carried
+// forward to the present instead, it overran each stop and had to come back.
+// The moment is as long as their reports take to arrive, in seconds: it
+// starts here, grows at once to cover a slower report plus a margin, shrinks
+// slowly when they come quicker, and never passes the limit.
+const paddleDelayStart = 0.05;
+const paddleDelayMargin = 0.01;
+const paddleDelayShrink = 0.02;
+const paddleDelayMax = 0.25;
+// More reports than arrive in that time.
+const paddleReportsKept = 16;
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
@@ -259,12 +273,21 @@ export const createSimulation = (random: () => number): Simulation => {
     contactY: 0,
     age: 0,
     miss: false,
-    hasPaddle: false,
-    paddleY: 0,
-    paddleDirection: 0 as Direction,
-    paddleHeld: 0,
-    paddleAge: 0,
   };
+  // The remote player's paddle reports not yet shown, oldest first from
+  // `paddleNext`: a ring, so that taking them in allocates nothing. `due` is
+  // the seconds from the end of the coming step to the moment the report
+  // takes effect; `fresh` marks one that arrived since the last step.
+  const paddleReports = Array.from({ length: paddleReportsKept }, () => ({
+    y: 0,
+    direction: 0 as Direction,
+    held: 0,
+    due: 0,
+    fresh: false,
+  }));
+  let paddleNext = 0;
+  let paddleCount = 0;
+  let paddleDelay = paddleDelayStart;
   let ai = aiProfiles.normal;
   let winningScore = 11;
   // For each paddle the AI plays: the seconds since it last decided, and
@@ -619,19 +642,34 @@ export const createSimulation = (random: () => number): Simulation => {
     }
   };
 
-  /** Take in the remote player's paddle, if they have reported it since the last step, and say whether they had. */
-  const takePaddle = () => {
-    if (!inbox.hasPaddle) return false;
-    inbox.hasPaddle = false;
+  /**
+   * Show the remote player's paddle as their reports that have come due
+   * describe it, and say whether one had: the paddle has then been carried
+   * to the end of this step already.
+   */
+  const takePaddle = (elapsed: number) => {
     const { left } = state;
-    const shown = left.y + left.offset;
-    left.y = clamp(inbox.paddleY, 0, Math.max(0, state.height - state.paddleHeight));
-    left.direction = inbox.paddleDirection;
-    left.held = Math.min(Math.max(0, inbox.paddleHeld), maxHold);
-    movePaddle(left, Math.min(inbox.paddleAge, maxAge), null);
-    // Drawn from where it was showing, and eased from there.
-    left.offset = shown - left.y;
-    return true;
+    let taken = false;
+    for (let index = 0; index < paddleCount; index++) {
+      const report = paddleReports[(paddleNext + index) % paddleReportsKept];
+      if (report == null) continue;
+      if (report.fresh) report.fresh = false;
+      else report.due -= elapsed;
+    }
+    for (let report = paddleReports[paddleNext]; paddleCount > 0 && report != null && report.due <= 0; report = paddleReports[paddleNext]) {
+      paddleNext = (paddleNext + 1) % paddleReportsKept;
+      paddleCount -= 1;
+      const shown = left.y + left.offset;
+      left.y = clamp(report.y, 0, Math.max(0, state.height - state.paddleHeight));
+      left.direction = report.direction;
+      left.held = Math.min(Math.max(0, report.held), maxHold);
+      // It took effect this long before the end of the step.
+      movePaddle(left, Math.min(-report.due, maxAge), null);
+      // Drawn from where it was showing, and eased from there.
+      left.offset = shown - left.y;
+      taken = true;
+    }
+    return taken;
   };
 
   /**
@@ -751,17 +789,25 @@ export const createSimulation = (random: () => number): Simulation => {
       state.left.offset = 0;
       inbox.hasBall = false;
       inbox.miss = false;
-      inbox.hasPaddle = false;
+      paddleCount = 0;
+      paddleDelay = paddleDelayStart;
       dismiss('left');
     },
 
     remotePaddle: (y, direction, held, age) => {
       if (!state.remote) return;
-      inbox.hasPaddle = true;
-      inbox.paddleY = y;
-      inbox.paddleDirection = direction;
-      inbox.paddleHeld = held;
-      inbox.paddleAge = Math.max(0, age);
+      const old = Math.max(0, age);
+      // With the ring full, the newest report gives way: the next one says where the paddle is anyway.
+      const report = paddleReports[(paddleNext + Math.min(paddleCount, paddleReportsKept - 1)) % paddleReportsKept];
+      if (report == null) return;
+      if (paddleCount < paddleReportsKept) paddleCount += 1;
+      report.y = y;
+      report.direction = direction;
+      report.held = held;
+      report.due = paddleDelay - old;
+      report.fresh = true;
+      const wanted = Math.min(old + paddleDelayMargin, paddleDelayMax);
+      paddleDelay += (wanted - paddleDelay) * (wanted > paddleDelay ? 1 : paddleDelayShrink);
     },
 
     remoteBall: (ball, kind, contactY, age) => {
@@ -803,7 +849,8 @@ export const createSimulation = (random: () => number): Simulation => {
       state.left.offset = 0;
       inbox.hasBall = false;
       inbox.miss = false;
-      inbox.hasPaddle = false;
+      paddleCount = 0;
+      paddleDelay = paddleDelayStart;
       dismiss('left');
       dismiss('right');
       parkBall();
@@ -840,7 +887,7 @@ export const createSimulation = (random: () => number): Simulation => {
         state.left.offset *= Math.exp(-elapsed / paddleEase);
         if (Math.abs(state.left.offset) < 0.1) state.left.offset = 0;
       }
-      if (!(state.remote && takePaddle())) {
+      if (!(state.remote && takePaddle(elapsed))) {
         movePaddle(state.left, elapsed, aiLeft ? aiDestination(state, 'left', ai) : null);
       }
       movePaddle(state.right, elapsed, state.attract ? aiDestination(state, 'right', ai) : null);
