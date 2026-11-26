@@ -292,33 +292,35 @@ describe('a game against a remote player', () => {
     return hits;
   };
 
-  it('sends the ball back from their paddle at once, ahead of their word', () => {
+  it('stops the ball at the face of their paddle until their word arrives', () => {
     const simulation = court();
     const { state } = simulation;
-    expect(toTheirEnd(simulation, true)).toBe(1);
-    expect(state.ball.heading).toBe(1);
+    expect(toTheirEnd(simulation, true)).toBe(0);
+    expect(state.awaiting).toBe(true);
+    expect(state.ball.x).toBe(state.paddleWidth);
+    expect(state.ball.heading).toBe(-1);
+    const { y } = state.ball;
+    simulation.step(frame, 0);
+    expect(state.ball.x).toBe(state.paddleWidth);
+    expect(state.ball.y).toBe(y);
+    // Their hit sends it back on the path they report.
+    simulation.remoteBall({ x: 100, y: 300, speed: state.ball.speed, heading: 1, angle: 0.2 }, 'hit', 310, 0);
+    expect(simulation.step(frame, 0)).toContain('paddle');
     expect(state.awaiting).toBe(false);
-    expect(state.predicted).toBe(true);
-    expect(state.contact.side).toBe('left');
-    // Their word replaces the guess, and the hit isn't heard twice.
-    const report = { x: 100, y: 300, speed: state.ball.speed, heading: 1 as const, angle: 0.2 };
-    simulation.remoteBall(report, 'hit', 310, 0);
-    expect(simulation.step(frame, 0)).not.toContain('paddle');
-    expect(state.predicted).toBe(false);
     expect(state.ball.x).toBe(100);
     expect(state.ball.y).toBe(300);
     expect(state.ball.angle).toBe(0.2);
   });
 
-  it('gives the point after all when the paddle it guessed had hit turns out to have missed', () => {
+  it('moves a ball it had stopped at their paddle to where it lies when they missed it', () => {
     const simulation = court();
     const { state } = simulation;
     toTheirEnd(simulation, true);
-    expect(state.predicted).toBe(true);
+    expect(state.awaiting).toBe(true);
     // For them it went on past the paddle to the edge of the court.
     simulation.remoteMiss(0, 400);
     expect(simulation.step(frame, 0)).toContain('point');
-    expect(state.predicted).toBe(false);
+    expect(state.awaiting).toBe(false);
     expect(state.ball.x).toBe(0);
     expect(state.ball.y).toBe(400);
     expect(state.scores).toEqual({ left: 0, right: 1 });
@@ -329,7 +331,6 @@ describe('a game against a remote player', () => {
     const { state } = simulation;
     expect(toTheirEnd(simulation, false)).toBe(0);
     expect(state.awaiting).toBe(true);
-    expect(state.predicted).toBe(false);
     expect(state.ball.x).toBe(0);
     expect(state.scores).toEqual({ left: 0, right: 0 });
     // They did reach it: their hit is news here.

@@ -84,12 +84,6 @@ export type SimulationState = {
    * for whether their paddle met it.
    */
   awaiting: boolean;
-  /**
-   * In a game against a remote player, the ball is coming back from their
-   * paddle on this side's guess that it met the ball there, ahead of their
-   * word on it. Their report, or their miss, replaces the guess.
-   */
-  predicted: boolean;
 };
 
 /** A ball as one player reports it to the other: where it is and how it is moving. */
@@ -266,7 +260,6 @@ export const createSimulation = (random: () => number): Simulation => {
     attract: false,
     remote: false,
     awaiting: false,
-    predicted: false,
   };
   const events: SimulationEvent[] = [];
   // What the remote player has reported since the last step, which the next one takes in.
@@ -388,7 +381,6 @@ export const createSimulation = (random: () => number): Simulation => {
     state.server = server;
     state.countdown = 0;
     state.awaiting = false;
-    state.predicted = false;
     if (!state.remote) brief('left', server);
     if (state.attract) brief('right', server);
     else state.phase = 'rally';
@@ -458,7 +450,6 @@ export const createSimulation = (random: () => number): Simulation => {
     state.server = scorer;
     state.ball.speed = 0;
     state.awaiting = false;
-    state.predicted = false;
     if (!state.remote) dismiss('left');
     events.push('point');
     if (state.scores[scorer] >= winningScore) {
@@ -496,7 +487,7 @@ export const createSimulation = (random: () => number): Simulation => {
    * `paddleY` and which is moving at `paddleVelocity` px per second (down is
    * positive).
    */
-  const hit = (side: Side, paddleY: number, paddleVelocity: number, jitter: boolean) => {
+  const hit = (side: Side, paddleY: number, paddleVelocity: number) => {
     const { ball } = state;
     if (paddleY >= ball.y + state.ballHeight || ball.y >= paddleY + state.paddleHeight) {
       missed = true;
@@ -514,7 +505,7 @@ export const createSimulation = (random: () => number): Simulation => {
       const down = ball.speed * Math.sin(slant) + paddleVelocity * paddleGrip;
       angle = Math.atan2(down, across);
     }
-    deflect(side, jitter ? angle + (random() * 2 - 1) * hitJitter : angle);
+    deflect(side, angle + (random() * 2 - 1) * hitJitter);
   };
 
   /**
@@ -560,10 +551,10 @@ export const createSimulation = (random: () => number): Simulation => {
   // the paddle it is heading for, or the edge behind that paddle, and carries
   // on from there with the time left. The paddles have already moved, so each
   // is placed where it was at the moment the ball reached it. A remote
-  // player's paddle is theirs to judge. Until their word arrives, a ball that
-  // meets it as it shows here comes back on a guess, and one that doesn't
-  // carries on to the edge of the court and waits there, where it will lie
-  // if their word is that it was a miss.
+  // player's paddle is theirs to judge, so a ball heading for it stops and
+  // waits for their word, in the place it will be if this side has read it
+  // right: at the face of their paddle if it shows as meeting the ball here,
+  // and otherwise at the edge of the court, where a missed ball lies.
   const moveBall = (dt: number, leftBefore: number, rightBefore: number) => {
     const { ball } = state;
     const maxY = state.height - state.ballHeight;
@@ -628,12 +619,10 @@ export const createSimulation = (random: () => number): Simulation => {
         if (theirs && missed) {
           state.awaiting = true;
         } else if (theirs) {
-          // A guess at what their game is deciding now, so the ball doesn't stall
-          // until their word arrives: with their paddle where it shows here, and
-          // without the nudge only their game can roll. Off the paddle as this
-          // side sees it, the ball goes on past and waits.
-          hit(heading, paddleTo, (paddle.y - before) / dt, false);
-          state.predicted = !missed;
+          // On their paddle as it shows here, the ball stops at its face and
+          // waits; off it, the ball goes on to the edge and waits there.
+          if (paddleTo >= ball.y + state.ballHeight || ball.y >= paddleTo + state.paddleHeight) missed = true;
+          else state.awaiting = true;
         } else if (missed && state.attract) {
           // Nothing scores in attract mode: the side that would have serves the next ball.
           state.server = heading === 'left' ? 'right' : 'left';
@@ -642,7 +631,7 @@ export const createSimulation = (random: () => number): Simulation => {
         } else if (missed) {
           point(heading === 'left' ? 'right' : 'left');
         } else {
-          hit(heading, paddleTo, (paddle.y - before) / dt, true);
+          hit(heading, paddleTo, (paddle.y - before) / dt);
         }
       }
     }
@@ -687,9 +676,8 @@ export const createSimulation = (random: () => number): Simulation => {
     if (inbox.miss) {
       inbox.miss = false;
       inbox.hasBall = false;
-      state.predicted = false;
       if (state.phase === 'rally') {
-        // Where it ended up for them, wherever this side's guesses had taken it.
+        // Where it ended up for them, wherever this side had stopped it.
         state.ball.x = clamp(inbox.missX, -state.ballWidth, state.width);
         state.ball.y = clamp(inbox.missY, 0, Math.max(0, state.height - state.ballHeight));
         point('right');
@@ -709,9 +697,6 @@ export const createSimulation = (random: () => number): Simulation => {
     ball.angle = inbox.ball.angle;
     state.awaiting = false;
     missed = false;
-    // A hit this side guessed at has been heard and seen already.
-    const guessed = state.predicted;
-    state.predicted = false;
     if (serve) {
       state.phase = 'rally';
       state.server = 'left';
@@ -721,7 +706,7 @@ export const createSimulation = (random: () => number): Simulation => {
       contact.side = 'left';
       contact.x = state.paddleWidth;
       contact.y = inbox.contactY;
-      if (!guessed) events.push('paddle');
+      events.push('paddle');
     }
     // Carry it forward to the end of this step. The paddles stay where the step has put them.
     for (let rest = Math.min(inbox.age, maxAge); rest > 0; rest -= maxDt) {
@@ -807,7 +792,6 @@ export const createSimulation = (random: () => number): Simulation => {
       if (state.attract) endAttract();
       state.remote = remote;
       state.awaiting = false;
-      state.predicted = false;
       state.left.offset = 0;
       inbox.hasBall = false;
       inbox.miss = false;
@@ -870,7 +854,6 @@ export const createSimulation = (random: () => number): Simulation => {
       state.winner = null;
       state.attract = false;
       state.awaiting = false;
-      state.predicted = false;
       state.left.offset = 0;
       inbox.hasBall = false;
       inbox.miss = false;
