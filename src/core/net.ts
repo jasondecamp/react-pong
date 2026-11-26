@@ -1,4 +1,7 @@
+import type { NetMessage } from './messages.js';
 import type { BallReportKind, Direction, Simulation, SimulationEvent } from './simulation.js';
+
+export type { NetMessage } from './messages.js';
 
 /**
  * The court every two-player match is played on, whatever box each player's
@@ -16,27 +19,6 @@ export const standardCourt = {
   /** Court heights per second. */
   paddleSpeed: 1.2,
 } as const;
-
-/**
- * What one player's game tells the other's. Each is written in the sender's
- * own view, with the sender on the right; `receive` turns it round.
- */
-export type NetMessage =
-  /** The sender's paddle: its top edge, the way it is moving, and for how long it has been. */
-  | { type: 'paddle'; y: number; direction: Direction; held: number }
-  /** The ball, after the sender served or hit it, or to agree on where it is. `contactY` is where a hit met the paddle. */
-  | {
-    type: 'ball';
-    kind: BallReportKind;
-    x: number;
-    y: number;
-    speed: number;
-    heading: -1 | 1;
-    angle: number;
-    contactY: number;
-  }
-  /** The sender's paddle missed the ball: the point is the receiver's. */
-  | { type: 'miss' };
 
 export type NetLink = {
   /**

@@ -13,10 +13,12 @@ Conventions are ported from Jason's react-snow (which adapted fourfightingfoxes 
 ```bash
 pnpm install          # Node 24, pnpm 12
 pnpm dev              # demo playground (Vite) at http://localhost:5318, imports from src/
+pnpm dev:server       # the two-player server, run locally by Wrangler at http://localhost:8787
+pnpm smoke:server     # with dev:server running: play a lobby through over real WebSockets
 pnpm build            # tsc -> dist/ (ESM .js + .d.ts), plus styles.css
 pnpm build:demo       # playground -> demo/dist/ (release.yml deploys it to Pages)
 pnpm lint             # ESLint 10 flat config
-pnpm typecheck        # tsc --noEmit
+pnpm typecheck        # tsc --noEmit, for the project and then for server/worker.ts
 pnpm test             # Vitest
 ```
 
@@ -31,6 +33,7 @@ pnpm test             # Vitest
   - **`createPong(elements, options)`** wires them together with `requestAnimationFrame`, `ResizeObserver`, `IntersectionObserver`, and key, focus, and visibility listeners. It writes the ball and paddle transforms directly and never inserts DOM. Every resource it acquires is released by `destroy()`.
 - **`src/react/`** contains `<Pong>` and its subcomponents and `usePongGame`, exported as `react-pong`. It may import from core, but core never imports from React.
   - `<Pong>` provides a store (`pongStore.ts`) through context. The store creates the engine in an effect, once `Pong.Court` has handed over its elements, and diffs the options key by key into `update()`. Game state reaches React through `subscribe`/`getState` with `useSyncExternalStore`, which changes only on score, phase, message, difficulty, winning score, help, or key map changes. **Per-frame positions never go through React state.**
+- **`server/`** is the two-player server (from 0.3.0), which isn't part of the package. `room.ts` is everything a lobby decides, in plain TypeScript with no knowledge of sockets or of its host: it is given a `RoomHost` (a clock, `send`, `close`, a timer, and somewhere to save its state) and is tested in Node. `worker.ts` is the Cloudflare end: a Worker that checks the origin and routes `/lobby/new` and `/lobby/<code>`, a `Lobby` Durable Object that gives one room its WebSockets, alarm, and storage, and a `Directory` Durable Object that hands out codes and caps the lobbies open. It is type-checked by `server/tsconfig.json` against the Workers runtime's types, which clash with the DOM's. The messages are defined once, in `src/core/protocol.ts` (game and server) and `src/core/messages.ts` (game to game), which import nothing with DOM types so the server can read them. The server never decides anything about the ball or the paddles: each game decides what happens at its own paddle (`src/core/net.ts`).
 - **Embedding rules are part of the API:** keyboard input only while the court has focus, handled keys `preventDefault`, everything else passes through; no listeners on `document` or `window` except visibility; any number of instances.
 
 ### Distribution
@@ -49,6 +52,7 @@ src/
   react/                      # Pong.tsx, Court.tsx, Score.tsx, Message.tsx, Help.tsx, usePongGame.ts, pongStore.ts, index.ts
   styles.css                  # the package stylesheet, --pong-* custom properties
   test/                       # test helpers (seeded random, browser stubs); not built
+server/                       # the two-player server, not published: room.ts, codes.ts, worker.ts, wrangler.jsonc, smoke.mjs
 demo/                         # Vite playground, not published; imports 'react-pong' aliased to src/
   components/<Name>/          # <Name>.tsx + <Name>.module.scss
 docs/PLAN.md
@@ -115,6 +119,7 @@ docs/PLAN.md
 - **Vitest** (`pnpm test`): co-locate tests with the code they cover (`name.test.ts` next to `name.ts`).
   - Simulation and AI tests run in the `node` environment (`// @vitest-environment node`) with an injected random source.
   - Engine, sound, and component tests run in jsdom with stubbed `requestAnimationFrame`, observers, and `AudioContext`. Use Testing Library and `@testing-library/user-event` for interaction.
+  - Server tests (`server/*.test.ts`) run in Node against `room.ts` with a host the test controls. The Cloudflare adapter has no unit tests: check it by running `pnpm dev:server` and `pnpm smoke:server`.
   - Cover StrictMode (mount, unmount, mount): no leaked loops, observers, listeners, or audio contexts. Cover two instances on one page not hearing each other's keys.
 - Validate before shipping: run lint, typecheck, tests, and the build before calling anything done. Gameplay feel is checked by Jason in the demo playground on his own `pnpm dev`; don't start a second dev server on the same port.
 - Skip re-running the test suite for style-only changes.

@@ -6,3 +6,7 @@ allowBuilds:
   # Native file watcher used only by the Sass CLI's --watch mode. Vite compiles
   # Sass through the sass-embedded API, so the watcher is never used here.
   '@parcel/watcher': false
+  # Wrangler, which runs and deploys the two-player server, needs both: esbuild
+  # bundles the Worker, and workerd is the Workers runtime it runs locally.
+  esbuild: true
+  workerd: true
