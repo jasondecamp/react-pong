@@ -93,7 +93,11 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # The two-player server the playground's games connect to. Without the
+      # variable, the playground has no two-player.
       - run: pnpm build:demo
+        env:
+          VITE_PONG_SERVER: ${{ vars.PONG_SERVER }}
       - uses: actions/upload-pages-artifact@v5
         with:
           path: demo/dist

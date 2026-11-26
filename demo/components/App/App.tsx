@@ -54,7 +54,7 @@ const snippet = (options: Options, declarations: string[]) => {
 
 // The two-player server: the one named when the playground was built, or in development the one
 // `pnpm dev:server` runs. With neither there is no two-player.
-const server = import.meta.env.VITE_PONG_SERVER ?? (import.meta.env.DEV ? 'ws://localhost:8787' : undefined);
+const server = import.meta.env.VITE_PONG_SERVER || (import.meta.env.DEV ? 'ws://localhost:8787' : undefined);
 
 // The playground: the game filling the window, as the original's page did,
 // beside a panel of controls for every option and theme property.
