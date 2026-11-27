@@ -502,7 +502,7 @@
   z-index: 2;
   display: flex;
   flex-direction: column;
-  gap: 1em;
+  gap: 0.75em;
   align-items: center;
   justify-content: center;
   padding: 1em;
@@ -532,16 +532,32 @@
   transform: translateX(-50%);
 }
 
-.pong-lobby-title {
+/* What the panel is for, until a lobby is joined. */
+.pong-lobby-title,
+.pong-lobby-headline {
   margin: 0;
   font-size: 1.75em;
   font-weight: var(--pong-font-weight);
-  line-height: 1;
+  line-height: 1.1;
   color: var(--pong-color);
 }
 
 .pong-lobby-line {
   margin: 0;
+}
+
+/* A small heading over whatever leads the panel. */
+.pong-lobby-label {
+  margin: 0;
+  font-size: 0.75em;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+/* What is still true but no longer the point, under the actions. */
+.pong-lobby-details {
+  margin: 0;
+  font-size: 0.75em;
 }
 
 .pong-lobby-score {
@@ -552,16 +568,26 @@
   color: var(--pong-paddle-left-color);
 }
 
-/* The code is the thing to read out, so it is the largest thing here. */
-.pong-lobby-code {
+/* While waiting alone the code is the thing to read out, and after a match
+   the result is the thing to read, so each is the largest thing there. */
+.pong-lobby-code,
+.pong-lobby-result {
   margin: 0;
   font-size: 2.5em;
   font-weight: var(--pong-font-weight-bold);
   line-height: 1;
   color: var(--pong-color);
+}
+
+.pong-lobby-code {
   letter-spacing: 0.25em;
   /* The last letter's spacing would push the code off center. */
   text-indent: 0.25em;
+}
+
+.pong-lobby-code-small {
+  font-weight: var(--pong-font-weight-bold);
+  letter-spacing: 0.15em;
 }
 
 .pong-lobby-join,
@@ -601,10 +627,18 @@
   cursor: pointer;
 }
 
-.pong-lobby-button[aria-pressed='true'] {
+/* The one thing to do next. */
+.pong-lobby-button-primary {
   color: var(--pong-background);
   background-color: var(--pong-color);
   border-color: var(--pong-color);
+}
+
+/* The way out, which is always there and never the point. */
+.pong-lobby-button-quiet {
+  color: inherit;
+  text-decoration: underline;
+  border-color: transparent;
 }
 
 .pong-lobby-button:focus-visible,
