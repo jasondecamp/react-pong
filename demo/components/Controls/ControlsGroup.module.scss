@@ -13,6 +13,25 @@
   border-radius: $radius;
 }
 
+.note {
+  margin: 0;
+  font-size: $font-size-s;
+  color: $color-text-muted;
+}
+
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: $space-s;
+  transition: opacity $transition-default;
+
+  // The note stays readable: it says why.
+  .group:disabled > & {
+    pointer-events: none;
+    opacity: $opacity-disabled;
+  }
+}
+
 .title {
   padding: 0 $space-xs;
   font-size: $font-size-s;
