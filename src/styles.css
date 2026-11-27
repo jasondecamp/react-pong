@@ -142,6 +142,24 @@
   box-shadow: 0 0 0 100vmax var(--pong-bar-color);
 }
 
+/* A parent named as the container `pong-box` (`container: pong-box / size`)
+   has the game hug the standard court in a lobby, so there are no bars: the
+   game becomes the largest 16 by 9 box that fits the parent, centered in it,
+   with the score, the message and the panels inside as ever. Its width is a
+   whole number of 80px, which makes the ball a whole number of px, as the
+   engine wants it. A border or padding on the game takes from the court and
+   brings thin bars back: use an outline or a box-shadow. */
+@supports (width: round(down, 1px, 1px)) {
+  @container pong-box (min-width: 0) {
+    .pong:has(.pong-court-standard) {
+      --pong-standard-width: round(down, min(100cqw, 100cqh * 16 / 9), 80px);
+      width: var(--pong-standard-width);
+      height: calc(var(--pong-standard-width) * 9 / 16);
+      margin: round(down, (100cqh - var(--pong-standard-width) * 9 / 16) / 2, 1px) round(down, (100cqw - var(--pong-standard-width)) / 2, 1px);
+    }
+  }
+}
+
 /* The engine moves the ball and paddles with inline transforms. Until it
    starts, the ball waits off the court and the paddles rest at mid-height.
    A ball without its color element is one flat color. */

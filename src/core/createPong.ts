@@ -336,8 +336,8 @@ export const createPong = (elements: PongElements, initialOptions: PongOptions =
     }
     if (twoPlayer) {
       // The standard court sits inside the box, so its paddles come in from the box's edges to the court's.
-      leftPaddle.style.transform = `translate(${round(x)}px, ${snap(y + (left.y + left.offset) * scale - leftRest)}px)`;
-      rightPaddle.style.transform = `translate(${round(-layout.right)}px, ${snap(y + right.y * scale - rightRest)}px)`;
+      leftPaddle.style.transform = `translate(${round(x)}px, ${round(snap(y + (left.y + left.offset) * scale) - leftRest)}px)`;
+      rightPaddle.style.transform = `translate(${round(-layout.right)}px, ${round(snap(y + right.y * scale) - rightRest)}px)`;
     } else {
       leftPaddle.style.transform = `translateY(${round(left.y + left.offset - leftRest)}px)`;
       rightPaddle.style.transform = `translateY(${round(right.y - rightRest)}px)`;
@@ -902,6 +902,16 @@ export const createPong = (elements: PongElements, initialOptions: PongOptions =
     }
   };
 
+  /**
+   * How far down the court the stylesheet rests a paddle, in px. In a match
+   * it is wanted to the fraction, which `offsetTop` rounds away: the paddle
+   * is placed on a whole pixel by its distance from here.
+   */
+  const restOf = (paddle: HTMLElement) => {
+    const exact = twoPlayer ? parseFloat(view?.getComputedStyle(paddle).top ?? '') : NaN;
+    return Number.isFinite(exact) ? exact : paddle.offsetTop;
+  };
+
   const measure = () => {
     if (twoPlayer) {
       // The standard court, as large as fits in the box and centered in it.
@@ -934,8 +944,8 @@ export const createPong = (elements: PongElements, initialOptions: PongOptions =
         leftPaddle.clientHeight,
       );
     }
-    leftRest = leftPaddle.offsetTop;
-    rightRest = rightPaddle.offsetTop;
+    leftRest = restOf(leftPaddle);
+    rightRest = restOf(rightPaddle);
     render();
     wake();
   };
