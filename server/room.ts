@@ -19,6 +19,8 @@ export type RoomState = {
   winningScore: number;
   /** Nobody has joined yet, so the first to arrive is the creator and may set the winning score. */
   fresh: boolean;
+  /** The seat that may change the winning score between matches: the creator's, or whoever was left when the host went. */
+  host: Seat | null;
   phase: 'lobby' | 'playing' | 'paused';
   players: [Player | null, Player | null];
   /** By seat. The match under way, or the last one finished. */
@@ -109,6 +111,8 @@ export const parseClientMessage = (raw: string): ClientMessage | null => {
     }
     case 'ready':
       return typeof value.ready === 'boolean' ? { type: 'ready', ready: value.ready } : null;
+    case 'winningScore':
+      return finite(value.winningScore) ? { type: 'winningScore', winningScore: value.winningScore } : null;
     case 'game':
       return finite(value.time) && isNetMessage(value.message)
         ? { type: 'game', time: value.time, message: value.message as Extract<ClientMessage, { type: 'game' }>['message'] }
@@ -126,6 +130,8 @@ export const parseClientMessage = (raw: string): ClientMessage | null => {
   }
 };
 
+const clampWinningScore = (score: number) => Math.min(maxWinningScore, Math.max(1, Math.floor(score)));
+
 const keyLetters = 'abcdefghijklmnopqrstuvwxyz0123456789';
 
 const newKey = (random: () => number) => {
@@ -138,6 +144,7 @@ export const newRoomState = (code: string): RoomState => ({
   code,
   winningScore: defaultWinningScore,
   fresh: true,
+  host: null,
   phase: 'lobby',
   players: [null, null],
   scores: [0, 0],
@@ -165,6 +172,7 @@ export const createRoom = (code: string, host: RoomHost, saved?: RoomState): Roo
     return {
       code: state.code,
       winningScore: state.winningScore,
+      host: state.host === seat,
       phase: state.phase,
       ready: state.players[seat]?.ready === true,
       opponent: opponent == null ? null : { ready: opponent.ready, connected: opponent.connected },
@@ -210,6 +218,8 @@ export const createRoom = (code: string, host: RoomHost, saved?: RoomState): Roo
   const vacate = (seat: Seat, notice: LobbyNotice) => {
     if (state.players[seat] == null) return;
     state.players[seat] = null;
+    // The lobby is whoever is left's to run.
+    if (state.host === seat) state.host = state.players[other(seat)] == null ? null : other(seat);
     if (state.phase !== 'lobby') endMatch();
     if (state.players[0] == null && state.players[1] == null) state.emptySince = host.now();
     sendTo(other(seat), { type: 'notice', notice });
@@ -243,7 +253,8 @@ export const createRoom = (code: string, host: RoomHost, saved?: RoomState): Roo
   };
 
   const relay = (seat: Seat, message: Extract<ClientMessage, { type: 'game' }>) => {
-    if (state.phase !== 'playing') return;
+    // A pause reaches the two games at different moments, so what one sent just before hearing of it still counts.
+    if (state.phase === 'lobby') return;
     const game = message.message;
     if (game.type === 'miss') {
       // A ball can be missed once: a second miss before the next serve is a repeat, or a lie.
@@ -294,9 +305,10 @@ export const createRoom = (code: string, host: RoomHost, saved?: RoomState): Roo
       const seat: Seat | null = state.players[0] == null ? 0 : state.players[1] == null ? 1 : null;
       if (seat == null) return 'full';
       if (state.fresh && hello.winningScore != null) {
-        state.winningScore = Math.min(maxWinningScore, Math.max(1, Math.floor(hello.winningScore)));
+        state.winningScore = clampWinningScore(hello.winningScore);
       }
       state.fresh = false;
+      if (state.players[0] == null && state.players[1] == null) state.host = seat;
       state.emptySince = null;
       const player: Player = { key: newKey(host.random), ready: false, connected: true, dropAt: null };
       state.players[seat] = player;
@@ -329,6 +341,16 @@ export const createRoom = (code: string, host: RoomHost, saved?: RoomState): Roo
           player.ready = message.ready;
           const opponent = state.players[other(seat)];
           if (player.ready && opponent?.ready === true && opponent.connected) startMatch();
+          commit();
+          return;
+        }
+        case 'winningScore': {
+          const winningScore = clampWinningScore(message.winningScore);
+          if (state.phase !== 'lobby' || state.host !== seat || winningScore === state.winningScore) return;
+          state.winningScore = winningScore;
+          // The other player was ready for the match as it was.
+          const opponent = state.players[other(seat)];
+          if (opponent != null) opponent.ready = false;
           commit();
           return;
         }

@@ -19,5 +19,9 @@ export type NetMessage =
     angle: number;
     contactY: number;
   }
-  /** The sender's paddle missed the ball: the point is the receiver's. */
-  | { type: 'miss' };
+  /**
+   * The sender's paddle missed the ball: the point is the receiver's. `x` and
+   * `y` are where the ball came to rest, since the receiver's may be
+   * elsewhere: stopped at the sender's paddle, if it looked to be a hit.
+   */
+  | { type: 'miss'; x: number; y: number };

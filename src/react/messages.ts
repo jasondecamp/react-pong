@@ -16,6 +16,17 @@ const fixed: Record<Exclude<PongMessageKey, 'smack.ai' | 'smack.human'>, Message
   paused: { text: 'PAUSED', hint: 'press space to resume' },
   gameOver: { text: 'GAME OVER', hint: "Well that was fun... don't you have better things to do, human?" },
   reset: { text: 'GAME OVER', hint: 'press esc to reset' },
+  // Two-player, which the original never had.
+  'serve.opponent': { text: "Opponent's serve." },
+  'toServe.you': { text: 'Your serve.', hint: 'press enter to serve' },
+  'toServe.opponent': { text: 'Opponent to serve.' },
+  'paused.opponent': { text: 'PAUSED', hint: 'your opponent paused' },
+  'away.opponent': { text: 'PAUSED', hint: 'your opponent stepped away' },
+  'disconnected.opponent': { text: 'PAUSED', hint: 'your opponent disconnected. waiting for them' },
+  reconnecting: { text: 'PAUSED', hint: 'connection lost. reconnecting' },
+  resuming: { text: 'Get ready.' },
+  won: { text: 'GAME OVER', hint: 'you won' },
+  lost: { text: 'GAME OVER', hint: 'you lost' },
 };
 
 // The AI talks either way: it gloats when it scores and sulks when the human

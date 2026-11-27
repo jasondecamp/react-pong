@@ -15,6 +15,7 @@ const rows: readonly { action: PongAction; label: string }[] = [
   { action: 'pause', label: 'Pause or resume' },
   { action: 'reset', label: 'Reset after game over' },
   { action: 'difficulty', label: 'Change difficulty (locked during active game)' },
+  { action: 'lobby', label: 'Two player' },
   { action: 'help', label: 'Show or hide these keys' },
 ];
 
@@ -41,14 +42,16 @@ const difficultyClasses: Record<PongDifficulty, string> = {
  * closes it.
  */
 export const Help = ({ className }: HelpProps) => {
-  const { phase, difficulty, winningScore, help, keys } = usePongGame();
+  const { phase, difficulty, winningScore, help, keys, lobby } = usePongGame();
+  // Against another player there is no difficulty, and without a server no two-player.
+  const versus = lobby != null && lobby.status !== 'idle';
   const [helpKey] = keysFor(keys, 'help');
   const [resetKey] = keysFor(keys, 'reset');
   const closers = [helpKey, resetKey].filter((key) => key != null).map(keyLabel);
   return (
     <>
       <div className='pong-help-hints' aria-live='polite' aria-hidden={help}>
-        {(phase === 'start' || phase === 'gameOver') && (
+        {(phase === 'start' || phase === 'gameOver') && !versus && (
           <p className={classNames('pong-hint', 'pong-difficulty', difficultyClasses[difficulty])}>{difficulty}</p>
         )}
         {helpKey != null && <p className='pong-hint'>press {keyLabel(helpKey)} for help</p>}
@@ -65,7 +68,7 @@ export const Help = ({ className }: HelpProps) => {
           <dl className='pong-help-keys'>
             {rows.map(({ action, label }) => {
               const bound = keysFor(keys, action);
-              if (bound.length === 0) return null;
+              if (bound.length === 0 || (action === 'lobby' && lobby == null)) return null;
               return (
                 <div key={action} className='pong-help-row'>
                   <dt className='pong-help-key'>

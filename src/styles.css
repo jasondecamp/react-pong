@@ -73,6 +73,10 @@
   --pong-help-color: color-mix(in srgb, var(--pong-color) 80%, transparent);
   --pong-help-size: 18px;
   --pong-help-font-weight: 400;
+  /* In a two-player match the court is one standard shape, scaled to fit.
+     Where the box is wider or taller than that, this fills what is left
+     over. */
+  --pong-bar-color: color-mix(in srgb, var(--pong-muted) 30%, transparent);
 }
 
 /* The dark palette, for a system set to dark. */
@@ -121,6 +125,41 @@
   outline-offset: -2px;
 }
 
+/* In a two-player lobby the court is the standard one, which the engine sizes
+   this to and places it over. The box around it shows as bars: this element's
+   shadow, which the court clips. The bars are a tint and not a fill, because
+   the court is stacked over the score and the message, and anything of theirs
+   that lands in a bar has to show through. Unsized, it is nothing. During a
+   match the engine also sets the ball's and paddles' width and height, to
+   draw them at the standard court's scale. */
+.pong-frame {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.pong-court-standard .pong-frame {
+  box-shadow: 0 0 0 100vmax var(--pong-bar-color);
+}
+
+/* A parent named as the container `pong-box` (`container: pong-box / size`)
+   has the game hug the standard court in a lobby, so there are no bars: the
+   game becomes the largest 16 by 9 box that fits the parent, centered in it,
+   with the score, the message and the panels inside as ever. Its width is a
+   whole number of 80px, which makes the ball a whole number of px, as the
+   engine wants it. A border or padding on the game takes from the court and
+   brings thin bars back: use an outline or a box-shadow. */
+@supports (width: round(down, 1px, 1px)) {
+  @container pong-box (min-width: 0) {
+    .pong:has(.pong-court-standard) {
+      --pong-standard-width: round(down, min(100cqw, 100cqh * 16 / 9), 80px);
+      width: var(--pong-standard-width);
+      height: calc(var(--pong-standard-width) * 9 / 16);
+      margin: round(down, (100cqh - var(--pong-standard-width) * 9 / 16) / 2, 1px) round(down, (100cqw - var(--pong-standard-width)) / 2, 1px);
+    }
+  }
+}
+
 /* The engine moves the ball and paddles with inline transforms. Until it
    starts, the ball waits off the court and the paddles rest at mid-height.
    A ball without its color element is one flat color. */
@@ -135,6 +174,12 @@
   background-color: var(--pong-ball-color, var(--pong-color));
   transform: translateX(-200%);
   will-change: transform;
+}
+
+/* The ball is drawn over the paddles: one that has got past a paddle lies in
+   its column, and stays whole when the paddle moves across it. */
+.pong-court > .pong-ball {
+  z-index: 1;
 }
 
 /* The ball's trail: ghosts of the ball. At a steady interval the engine leaves
@@ -174,8 +219,9 @@
 }
 
 /* The ball is a window onto this gradient: the engine stretches it from the
-   ball's width to the court's and slides it opposite the ball, so it stays
-   put on the court while the ball moves across it. */
+   ball's width to the court's, and a ball's width more at each end, and
+   slides it opposite the ball, so it stays put on the court while the ball
+   moves across it. */
 .pong-ball-color {
   width: 100%;
   height: 100%;
@@ -448,6 +494,189 @@
   opacity: 0;
 }
 
+/* The two-player panel covers the court as the help does, but it has
+   controls, so it takes clicks. */
+.pong-lobby {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75em;
+  align-items: center;
+  justify-content: center;
+  padding: 1em;
+  font-size: var(--pong-help-size);
+  font-weight: var(--pong-help-font-weight);
+  line-height: 1.4;
+  color: var(--pong-help-color);
+  text-align: center;
+  background-color: var(--pong-help-background);
+  transition: opacity 0.2s, visibility 0.2s;
+}
+
+.pong-lobby-hidden {
+  visibility: hidden;
+  opacity: 0;
+}
+
+/* The hint that names the panel's key, at the top of the start screen. */
+.pong-lobby-hint {
+  position: absolute;
+  top: 1.5em;
+  left: 50%;
+  width: max-content;
+  max-width: 90%;
+  margin: 0;
+  text-align: center;
+  transform: translateX(-50%);
+}
+
+/* What the panel is for, until a lobby is joined. */
+.pong-lobby-title,
+.pong-lobby-headline {
+  margin: 0;
+  font-size: 1.75em;
+  font-weight: var(--pong-font-weight);
+  line-height: 1.1;
+  color: var(--pong-color);
+}
+
+.pong-lobby-line {
+  margin: 0;
+}
+
+/* A small heading over whatever leads the panel. */
+.pong-lobby-label {
+  margin: 0;
+  font-size: 0.75em;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+/* What is still true but no longer the point, under the actions. */
+.pong-lobby-details {
+  margin: 0;
+  font-size: 0.75em;
+}
+
+.pong-lobby-score {
+  font-weight: var(--pong-font-weight-bold);
+}
+
+.pong-lobby-error {
+  color: var(--pong-paddle-left-color);
+}
+
+/* While waiting alone the code is the thing to read out, and after a match
+   the result is the thing to read, so each is the largest thing there. */
+.pong-lobby-code,
+.pong-lobby-result {
+  margin: 0;
+  font-size: 2.5em;
+  font-weight: var(--pong-font-weight-bold);
+  line-height: 1;
+  color: var(--pong-color);
+}
+
+.pong-lobby-code {
+  letter-spacing: 0.25em;
+  /* The last letter's spacing would push the code off center. */
+  text-indent: 0.25em;
+}
+
+.pong-lobby-code-small {
+  font-weight: var(--pong-font-weight-bold);
+  letter-spacing: 0.15em;
+}
+
+.pong-lobby-join,
+.pong-lobby-share,
+.pong-lobby-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5em;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  margin: 0;
+}
+
+.pong-lobby-link {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 0.75em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  user-select: all;
+}
+
+.pong-lobby-button,
+.pong-lobby-field {
+  box-sizing: border-box;
+  padding: 0.4em 0.9em;
+  font: inherit;
+  line-height: 1.2;
+  color: var(--pong-color);
+  background-color: transparent;
+  border: 1px solid currentcolor;
+  border-radius: 0.3em;
+}
+
+.pong-lobby-button {
+  cursor: pointer;
+}
+
+/* The one thing to do next. */
+.pong-lobby-button-primary {
+  color: var(--pong-background);
+  background-color: var(--pong-color);
+  border-color: var(--pong-color);
+}
+
+/* The way out, which is always there and never the point. */
+.pong-lobby-button-quiet {
+  color: inherit;
+  text-decoration: underline;
+  border-color: transparent;
+}
+
+.pong-lobby-button:focus-visible,
+.pong-lobby-field:focus-visible {
+  outline: 2px solid var(--pong-focus-color);
+  outline-offset: 2px;
+}
+
+.pong-lobby-field {
+  width: 6em;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+}
+
+.pong-lobby-field::placeholder {
+  color: var(--pong-muted);
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.pong-lobby .pong-hint {
+  margin: 0;
+  font-size: 0.75em;
+  text-align: center;
+}
+
+/* Only where there is nothing to play with but a touch screen. */
+.pong-lobby-touch {
+  display: none;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .pong-lobby-touch {
+    display: block;
+  }
+}
+
 /* The score to play to heads the help, with the number picked out. */
 .pong-help-goal {
   margin: 0;
@@ -536,7 +765,8 @@
 @media (prefers-reduced-motion: reduce) {
   .pong-score-side,
   .pong-message,
-  .pong-help {
+  .pong-help,
+  .pong-lobby {
     transition: none;
   }
 

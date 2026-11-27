@@ -53,6 +53,7 @@ Click the court (or tab to it) to give it the keyboard. Keys the game handles do
 | Space | Pause and resume. |
 | Esc | After game over, reset. |
 | ? | Show the keys, pausing a rally first. ? or Esc closes them, and the rally stays paused until you resume it with Space. |
+| 2 | With a two-player server set, open the two-player panel from the start screen. See [Two-player](#two-player). |
 | D | Step the difficulty: easy, normal, hard, impossible. Between games only: on the start screen and after game over. |
 
 Just above the score, a small hint points to the help. Between games the current difficulty is shown above it, in its own color.
@@ -97,8 +98,9 @@ const ServeButton = () => {
 | `<Pong.Score>` | `className` | The two scores, AI on the left. The winner's scales up. |
 | `<Pong.Message>` | `className` | The start, toss, countdown, pause, game over, and smack-talk copy. Smack talk fades after 5 seconds, and no line repeats within a match. For your own copy, replace it with a part of your own. |
 | `<Pong.Help>` | `className` (on the overlay) | Just above the score, the "press ? for help" hint and, between games, the current difficulty above it, color-coded. Also the overlay the help key opens: every key in the current key map with what it does, including the difficulty key and the note that it doesn't work during a game, headed by the score to play to ("First to 11 wins") and followed by an advanced section ("Momentum" and "Corners") on how a moving paddle and a paddle's corners change the ball's path. A key you leave out of `keys` gets no hint and no row. |
+| `<Pong.Lobby>` | `className` (on the panel) | Two-player: the "press 2 for two player" hint on the start screen, and the panel that key opens, for creating a lobby or joining one by its code. It renders nothing without the `server` option. |
 
-`usePongGame()` returns the state below plus `serve()`, `pause()`, `resume()`, `reset()`, `openHelp()`, and `closeHelp()`. It re-renders only when something in the state changes, never per frame.
+`usePongGame()` returns the state below plus `serve()`, `pause()`, `resume()`, `reset()`, `openHelp()`, `closeHelp()`, and for two-player `openLobby()`, `closeLobby()`, `createLobby()`, `joinLobby(code)`, `setReady(ready)`, and `leaveLobby()`. It re-renders only when something in the state changes, never per frame.
 
 | State | |
 | --- | --- |
@@ -112,6 +114,7 @@ const ServeButton = () => {
 | `winningScore` | Points needed to win: the `winningScore` option with its default filled in. |
 | `help` | Whether the help is open. Never during a rally. |
 | `keys` | The key map in use: the `keys` option with its default filled in. |
+| `lobby` | Two-player, or `null` without the `server` option: `open` (the panel), `status` (`'idle'`, `'connecting'`, `'waiting'` in a lobby, `'playing'`), `code`, `link`, `invitation` (a code this game was handed to join with), `error`, `notice`, `ready`, `opponent` (`{ ready, connected }` or `null`), `host` (whether this player is the lobby's host), `winningScore`, and `pause` (`{ by, reason }` while a match is paused). In a match, `message` can also be `'serve.opponent'`, `'toServe.you'`, `'toServe.opponent'`, `'paused.opponent'`, `'away.opponent'`, `'disconnected.opponent'`, `'reconnecting'`, `'resuming'`, `'won'`, or `'lost'`. |
 | `matchRoll` | A random number in [0, 1) drawn at the start of each match. With `messageCount`, it lets your own copy be dealt from a deck shuffled once per match. |
 
 `<Pong>` renders the start screen on the server and starts the game in an effect.
@@ -163,6 +166,9 @@ The engine adds no classes for looks that follow from the state, so these are yo
 - `pong-paddle-pulsing` on the left paddle while `getState().difficulty` is `'impossible'`.
 - `pong-paddle-game-point` on a paddle while its side's score is `winningScore - 1` and the phase is neither `'start'` nor `'gameOver'`.
 - `pong-light` or `pong-dark` on the root to fix the palette; with neither it follows the system setting.
+- `pong-court-standard` on the court while `getState().lobby?.status` is `'waiting'` or `'playing'`, which tints the box around the standard court.
+
+For two-player, also give the engine a `frame` element (`<div class="pong-frame" aria-hidden="true"></div>`, the court's first child), which it sizes to the standard court, and build the lobby's controls on `openLobby()`, `createLobby()`, `joinLobby(code)`, `setReady(ready)`, and `leaveLobby()`.
 
 The score, message, and help are yours to render from `getState()`: the engine handles the help and difficulty keys and reports `help`, `difficulty`, `winningScore`, and `keys` in the state.
 
@@ -191,6 +197,9 @@ The score, message, and help are yours to render from `getState()`: the engine h
 | `toss` | `true` | Open each match with a toss for the first serve and a 3-2-1 countdown, about 3.6 seconds in all. Under `prefers-reduced-motion` the bouncing is skipped and only the announcement and countdown remain. `false` serves at once. Losing focus, hiding the tab, scrolling offscreen, or opening the help during it returns to the start screen. |
 | `keys` | arrows, Enter, Space, Esc, ?, d | `KeyboardEvent.key` values mapped to `'up'`, `'down'`, `'serve'`, `'pause'`, `'reset'`, `'help'`, or `'difficulty'`. Replaces the whole map, so list every key you want: `{ w: 'up', s: 'down', Enter: 'serve', ' ': 'pause', Escape: 'reset', '?': 'help' }` has no difficulty key. |
 | `paddleSpeed` | `1.2` | Starting paddle speed, in court heights per second, so it feels the same on any court. A paddle eases in to this speed over its first 0.08s rather than jumping to it, and a held one goes on speeding up to three times this over two seconds, and the faster it is moving when it meets the ball, the more it bends the ball's path. |
+| `server` | none | The two-player server's address, such as `wss://your-server.example.workers.dev`. Without it there is no two-player. See [Two-player](#two-player). |
+| `lobbyLink` | this page's address with `?pong=<code>` | A function from a lobby's code to the link that brings another player to it, for a page that routes its own links. |
+| `lobbyCode` | the page's `pong` parameter | A lobby code to offer to join: the panel opens with it in its field. |
 | `onPoint` | | Called with `{ scorer, scores }` after every point. |
 | `onGameOver` | | Called with `{ winner, scores }` when a side wins. |
 | `onDifficultyChange` | | Called with the new difficulty when the difficulty key changes it. If you pass `difficulty` from your own state, set it here so the two agree. |
@@ -238,15 +247,35 @@ Every color and size is a custom property. Set them on the root, through `<Pong>
 | `--pong-message-size`, `--pong-hint-size` | `52px`, `12px` | |
 | `--pong-difficulty-easy-color`, `--pong-difficulty-normal-color`, `--pong-difficulty-hard-color`, `--pong-difficulty-impossible-color` | `#2a9d5c`, `#d9900a`, `#e0452c`, `#7a2bbf` (dark `#a05ce6`) | The difficulty shown above the score between games. |
 | `--pong-help-background` | `--pong-background` | What the help covers the court with. |
+| `--pong-bar-color` | `--pong-muted` at 30%, see-through | In a two-player match, what tints the box around the standard court where the two differ in shape. Keep it see-through: the score or a hint that lands in a bar shows through it. |
 | `--pong-help-color`, `--pong-help-size`, `--pong-help-font-weight` | `--pong-color` at 80%, `18px`, `400` | The help's text. It is heavier than the game's so that small type stays readable; if you load your own font, load this weight too. |
 
 The message fade, the help's fade, and the winner's scale-up are disabled under `prefers-reduced-motion`.
+
+## Two-player
+
+Two people in two browsers can play each other. One creates a lobby and shares its four-letter code, or the link that carries it; the other opens the link, or types the code in. When both say they are ready, the first serve is tossed for and the match begins.
+
+It needs a server, which this repository contains (`server/`, a Cloudflare Worker) but which each site runs for itself. Give `<Pong>` its address and the rest is built in:
+
+```jsx
+<Pong server='wss://your-server.example.workers.dev' />
+```
+
+- Both players see themselves on the right.
+- A match is played on one standard court, 16 by 9, scaled to fit each player's box, so both see exactly the same game whatever the shape of their page. It is the largest court that fits with a ball a whole number of screen pixels wide, so the ball and paddles line up exactly. Where the box is a different shape, what is left over shows as tinted bars, unless you let the game hug the court: name the game's parent as the container `pong-box` (`container: pong-box / size;`), and in a lobby the game becomes the largest 16 by 9 box that fits the parent, centered in it, with the score, message and panels inside. Draw any edge on the game with an outline or a box-shadow then, since a border or padding takes from the court and brings thin bars back. Browsers without CSS `round()` keep the bars. The ball's and paddles' sizes and the paddle speed are the standard court's; colors, fonts, the palette, sound, ripples, the trail, and keys stay each player's own.
+- It is played to the `winningScore` of the lobby's host: its creator, or whoever was left when the host went. The host's `winningScore` option still applies between matches, so changing it changes the next match for both players, and asks the other player to say they are ready again; during a match it waits for the match to end. The other player's `winningScore` is not used. There is no AI, so no difficulty and no smack talk.
+- After the toss, each point is served by whoever scored the last one, with the serve key.
+- Space pauses for both players, and only the player who paused can resume, after a 3-2-1 countdown. Losing focus, hiding the tab, or opening the help pauses too. A dropped connection has 30 seconds to come back by itself before the match is abandoned.
+- After a match both players are back in the lobby, where being ready again starts another. Esc leaves, outside a rally.
+- The game is played with a keyboard: a touch-only device can join a lobby but not move a paddle.
 
 ## Development
 
 ```bash
 pnpm install    # Node 24, pnpm 12
 pnpm dev        # playground with a control for every option, at http://localhost:5318
+pnpm dev:server # the two-player server, run locally at http://localhost:8787; the playground in dev uses it
 pnpm lint
 pnpm typecheck
 pnpm test

@@ -32,8 +32,9 @@ pnpm test             # Vitest
   - **Sound** synthesizes the blips with Web Audio. No audio files.
   - **`createPong(elements, options)`** wires them together with `requestAnimationFrame`, `ResizeObserver`, `IntersectionObserver`, and key, focus, and visibility listeners. It writes the ball and paddle transforms directly and never inserts DOM. Every resource it acquires is released by `destroy()`.
 - **`src/react/`** contains `<Pong>` and its subcomponents and `usePongGame`, exported as `react-pong`. It may import from core, but core never imports from React.
-  - `<Pong>` provides a store (`pongStore.ts`) through context. The store creates the engine in an effect, once `Pong.Court` has handed over its elements, and diffs the options key by key into `update()`. Game state reaches React through `subscribe`/`getState` with `useSyncExternalStore`, which changes only on score, phase, message, difficulty, winning score, help, or key map changes. **Per-frame positions never go through React state.**
+  - `<Pong>` provides a store (`pongStore.ts`) through context. The store creates the engine in an effect, once `Pong.Court` has handed over its elements, and diffs the options key by key into `update()`. Game state reaches React through `subscribe`/`getState` with `useSyncExternalStore`, which changes only on score, phase, message, difficulty, winning score, help, key map, or lobby changes. **Per-frame positions never go through React state.**
 - **`server/`** is the two-player server (from 0.3.0), which isn't part of the package. `room.ts` is everything a lobby decides, in plain TypeScript with no knowledge of sockets or of its host: it is given a `RoomHost` (a clock, `send`, `close`, a timer, and somewhere to save its state) and is tested in Node. `worker.ts` is the Cloudflare end: a Worker that checks the origin and routes `/lobby/new` and `/lobby/<code>`, a `Lobby` Durable Object that gives one room its WebSockets, alarm, and storage, and a `Directory` Durable Object that hands out codes and caps the lobbies open. It is type-checked by `server/tsconfig.json` against the Workers runtime's types, which clash with the DOM's. The messages are defined once, in `src/core/protocol.ts` (game and server) and `src/core/messages.ts` (game to game), which import nothing with DOM types so the server can read them. The server never decides anything about the ball or the paddles: each game decides what happens at its own paddle (`src/core/net.ts`).
+- **Two-player in the engine.** With the `server` option, `createPong` holds a `lobby.ts` client (the connection: the lobby's state, the server's clock, and coming back after a drop) and, during a match, a `net.ts` link. A match puts the simulation in its remote mode on the standard court, which `measure` scales into the box; every position the engine writes goes through that scale. A pause freezes the engine rather than the simulation, since the two games stop at different moments and agree on the ball again when play resumes. `src/test/lobbyServer.ts` stands a server in for `WebSocket` in tests, running the real `server/room.ts`.
 - **Embedding rules are part of the API:** keyboard input only while the court has focus, handled keys `preventDefault`, everything else passes through; no listeners on `document` or `window` except visibility; any number of instances.
 
 ### Distribution
@@ -94,7 +95,7 @@ docs/PLAN.md
 ## Styling
 
 - **The package ships one plain stylesheet**, `react-pong/styles.css`. Its classes are prefixed `pong-` (no CSS modules in the package, since consumers' bundlers vary). Every color, size, and the font is a `--pong-*` custom property with a default (most are the original's values; the ball, the AI's paddle, and the message size have since changed); add a property rather than a hard-coded value. The defaults are the light palette; the dark palette's block, which appears twice (under `prefers-color-scheme: dark`, and for `.pong-dark`), redefines the few that differ, so change both copies together.
-- The engine's per-frame `transform` writes are the one sanctioned inline style. Never put CSS variables in inline styles.
+- The engine's per-frame `transform` writes are the one sanctioned inline style, with one exception: in a two-player lobby it also sets `width` and `height` on the ball, the paddles, the trail's ghosts, and the frame, to draw the standard court at the scale that fits the box, and clears them on leaving. Never put CSS variables in inline styles.
 - Transitions are disabled under `prefers-reduced-motion`.
 - **The demo** uses Sass with CSS modules, as in fourfightingfoxes:
   - Every component imports **only** its co-named `<Name>.module.scss`. Shared styles are explicit Sass partials that modules `@use`/`@forward`.
@@ -112,7 +113,7 @@ docs/PLAN.md
 - No allocation in the per-frame path: mutate the simulation state in place and reuse event buffers.
 - All motion is delta-time based (px per second), never per frame. Clamp large `dt` so the ball doesn't teleport, and sweep collisions so it can't tunnel through a paddle.
 - The loop idles (no `requestAnimationFrame` scheduled) whenever nothing moves: between points without attract mode, paused, game over, or offscreen.
-- React re-renders only on score, phase, message, difficulty, winning score, help, or key map changes.
+- React re-renders only on score, phase, message, difficulty, winning score, help, key map, or lobby changes.
 
 ## Testing and validation
 

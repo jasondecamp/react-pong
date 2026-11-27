@@ -20,14 +20,14 @@ const stranger = await connect('/lobby/new', 'https://example.com');
 check('an origin off the list is refused', stranger.failed || stranger.closed);
 
 const a = await connect('/lobby/new');
-a.say({ type: 'hello', version: 1, winningScore: 2 });
+a.say({ type: 'hello', version: 2, winningScore: 2 });
 await wait(300);
 const welcome = last(a, 'welcome');
 check('the creator is welcomed with a code', /^[BCDFGHJKLMNPQRSTVWXZ]{4}$/.test(welcome?.state.code ?? ''), JSON.stringify(a.got));
 const code = welcome.state.code;
 
 const missing = await connect('/lobby/ZZZZ');
-missing.say({ type: 'hello', version: 1 });
+missing.say({ type: 'hello', version: 2 });
 await wait(300);
 check('an unknown code is not found', last(missing, 'error')?.error === 'notFound', JSON.stringify(missing.got));
 
@@ -37,13 +37,21 @@ await wait(300);
 check('another protocol version is refused', last(old, 'error')?.error === 'version', JSON.stringify(old.got));
 
 const b = await connect(`/lobby/${code.toLowerCase()}`);
-b.say({ type: 'hello', version: 1 });
+b.say({ type: 'hello', version: 2 });
 await wait(300);
 check('the joiner is welcomed with the creator\'s winning score', last(b, 'welcome')?.state.winningScore === 2, JSON.stringify(b.got));
 check('the creator hears of the joiner', last(a, 'state')?.state.opponent?.connected === true);
 
+check('the creator is the host', last(a, 'welcome')?.state.host === true && last(b, 'welcome')?.state.host === false);
+b.say({ type: 'winningScore', winningScore: 9 });
+a.say({ type: 'winningScore', winningScore: 3 });
+await wait(300);
+check('only the host changes the winning score', last(b, 'state')?.state.winningScore === 3, JSON.stringify(b.got));
+a.say({ type: 'winningScore', winningScore: 2 });
+await wait(300);
+
 const third = await connect(`/lobby/${code}`);
-third.say({ type: 'hello', version: 1 });
+third.say({ type: 'hello', version: 2 });
 await wait(300);
 check('a third player finds it full', last(third, 'error')?.error === 'full', JSON.stringify(third.got));
 
@@ -77,7 +85,7 @@ b.socket.close();
 await wait(400);
 check('a dropped connection pauses the match', last(a, 'state')?.state.pause?.reason === 'disconnected');
 const back = await connect(`/lobby/${code}`);
-back.say({ type: 'hello', version: 1, seat: last(b, 'welcome').seat });
+back.say({ type: 'hello', version: 2, seat: last(b, 'welcome').seat });
 await wait(400);
 check('coming back with the key resumes it', last(back, 'welcome')?.state.scores.opponent === 1 && last(a, 'state')?.state.phase === 'playing');
 

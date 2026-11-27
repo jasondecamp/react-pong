@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import type { PongOptions } from '../core/types.js';
 import { Court } from './Court.js';
 import { Help } from './Help.js';
+import { Lobby } from './Lobby.js';
 import { Message } from './Message.js';
 import { PongContext } from './PongContext.js';
 import { createPongStore } from './pongStore.js';
@@ -26,7 +27,10 @@ export type PongProps = PongOptions & {
    * on a page that doesn't, set the one that matches the page. Default `'system'`.
    */
   theme?: PongTheme;
-  /** The arrangement. Default: `<Pong.Court />`, `<Pong.Score />`, `<Pong.Message />`, and `<Pong.Help />`. */
+  /**
+   * The arrangement. Default: `<Pong.Court />`, `<Pong.Score />`, `<Pong.Message />`, `<Pong.Help />`, and
+   * `<Pong.Lobby />`, which renders nothing without a `server`.
+   */
   children?: ReactNode;
 };
 
@@ -58,6 +62,7 @@ export const Pong = ({ className, theme = 'system', children, ...options }: Pong
             <Score />
             <Message />
             <Help />
+            <Lobby />
           </>
         )}
       </div>
@@ -69,3 +74,4 @@ Pong.Court = Court;
 Pong.Score = Score;
 Pong.Message = Message;
 Pong.Help = Help;
+Pong.Lobby = Lobby;

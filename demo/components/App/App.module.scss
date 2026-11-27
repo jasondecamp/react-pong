@@ -18,11 +18,14 @@
   min-height: 0;
   padding: $wall-width;
   background: $color-wall;
+  // In a two-player lobby the game shrinks to the standard court, centered here.
+  container: pong-box / size;
 }
 
 .game {
   font-family: $font-game;
-  border: $court-border-width solid $color-court-border;
+  // A shadow, not a border, which would take from the court: the standard court has to fit the game exactly.
+  box-shadow: 0 0 0 $court-border-width $color-court-border;
   // The court owns this page and its border already marks it out, so the
   // package's focus outline, drawn just inside the court's edge and over the
   // paddles, is turned off here.

@@ -15,6 +15,18 @@ export type PongGame = PongState & {
   openHelp: () => void;
   /** Close the help. A rally it paused stays paused. */
   closeHelp: () => void;
+  /** Open the two-player panel, from the start screen. Does nothing without a `server`. */
+  openLobby: () => void;
+  /** Close the two-player panel. Does nothing while in a lobby, which is left rather than closed. */
+  closeLobby: () => void;
+  /** Create a lobby and wait in it for another player. */
+  createLobby: () => void;
+  /** Join the lobby with this code. */
+  joinLobby: (code: string) => void;
+  /** In a lobby: say this player is ready for a match, or no longer is. */
+  setReady: (ready: boolean) => void;
+  /** Leave the lobby for the single-player start screen. */
+  leaveLobby: () => void;
 };
 
 /**
@@ -34,5 +46,11 @@ export const usePongGame = (): PongGame => {
     reset: store.reset,
     openHelp: store.openHelp,
     closeHelp: store.closeHelp,
+    openLobby: store.openLobby,
+    closeLobby: store.closeLobby,
+    createLobby: store.createLobby,
+    joinLobby: store.joinLobby,
+    setReady: store.setReady,
+    leaveLobby: store.leaveLobby,
   }), [state, store]);
 };

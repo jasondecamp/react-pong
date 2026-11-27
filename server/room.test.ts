@@ -23,7 +23,7 @@ const serve: ClientMessage = {
   time: 0,
   message: { type: 'ball', kind: 'serve', x: 1170, y: 300, speed: 780, heading: -1, angle: 0.1, contactY: 300 },
 };
-const miss: ClientMessage = { type: 'game', time: 0, message: { type: 'miss' } };
+const miss: ClientMessage = { type: 'game', time: 0, message: { type: 'miss', x: 0, y: 0 } };
 
 /** A room on a host the test controls: a clock it moves, and a record of everything sent, closed, and saved. */
 const setup = (saved?: RoomState) => {
@@ -87,6 +87,37 @@ describe('joining', () => {
     expect(room.join(hello({ winningScore: 21 }))).toBe(1);
     expect(lobbyState(1)).toMatchObject({ winningScore: 5, opponent: { ready: false, connected: true } });
     expect(lobbyState(0)).toMatchObject({ opponent: { ready: false, connected: true } });
+  });
+
+  it('makes the creator the host, who alone can change the winning score, between matches', () => {
+    const { room, lobbyState } = setup();
+    room.join(hello({ winningScore: 5 }));
+    room.join(hello());
+    expect(lobbyState(0)).toMatchObject({ host: true });
+    expect(lobbyState(1)).toMatchObject({ host: false });
+    room.message(1, { type: 'winningScore', winningScore: 3 });
+    expect(room.state.winningScore).toBe(5);
+    // The other player was ready for the match as it was, so they are asked again.
+    room.message(1, { type: 'ready', ready: true });
+    room.message(0, { type: 'winningScore', winningScore: 7.9 });
+    expect(lobbyState(1)).toMatchObject({ winningScore: 7, ready: false });
+    expect(lobbyState(0)).toMatchObject({ winningScore: 7, opponent: { ready: false } });
+    room.message(0, { type: 'ready', ready: true });
+    room.message(1, { type: 'ready', ready: true });
+    room.message(0, { type: 'winningScore', winningScore: 3 });
+    expect(room.state.winningScore).toBe(7);
+  });
+
+  it('hands the lobby to whoever is left when its host leaves', () => {
+    const { room, lobbyState } = setup();
+    room.join(hello());
+    room.join(hello());
+    room.message(0, { type: 'leave' });
+    expect(lobbyState(1)).toMatchObject({ host: true });
+    room.join(hello());
+    expect(lobbyState(0)).toMatchObject({ host: false });
+    room.message(1, { type: 'winningScore', winningScore: 4 });
+    expect(lobbyState(0)).toMatchObject({ winningScore: 4 });
   });
 
   it('keeps the winning score within reason', () => {
@@ -183,13 +214,19 @@ describe('a match', () => {
 
 describe('pausing', () => {
   it('pauses for both, and says whose pause it is', () => {
-    const { room, lobbyState, host } = playing();
+    const { room, lobbyState } = playing();
     room.message(1, { type: 'pause', reason: 'away' });
     expect(lobbyState(0)).toMatchObject({ phase: 'paused', pause: { by: 'opponent', reason: 'away' } });
     expect(lobbyState(1)).toMatchObject({ phase: 'paused', pause: { by: 'you', reason: 'away' } });
-    const before = host.sent[1].length;
+  });
+
+  it('still passes on what a game sent before it heard of the pause', () => {
+    const { room, last } = playing();
+    room.message(1, { type: 'pause', reason: 'manual' });
     room.message(0, serve);
-    expect(host.sent[1]).toHaveLength(before);
+    expect(last(1)).toEqual(serve);
+    room.message(1, miss);
+    expect(room.state.scores).toEqual([1, 0]);
   });
 
   it('lets only the player who paused resume, with a countdown for both', () => {
@@ -350,6 +387,7 @@ describe('reading a message', () => {
   it('reads each message it knows', () => {
     const messages: ClientMessage[] = [
       { type: 'hello', version: 1, winningScore: 7, seat: 'abc' },
+      { type: 'winningScore', winningScore: 7 },
       { type: 'ready', ready: true },
       serve,
       miss,

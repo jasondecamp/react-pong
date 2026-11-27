@@ -7,6 +7,8 @@ export type {
   PongGameOverEvent,
   PongInstance,
   PongKeys,
+  PongLobby,
+  PongLobbyStatus,
   PongMessageKey,
   PongOptions,
   PongPhase,

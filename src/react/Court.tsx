@@ -37,6 +37,9 @@ export const Court = ({ className, 'aria-label': ariaLabel = 'Pong court', autoF
   const leftRippleRef = useRef<HTMLDivElement>(null);
   const rightRippleRef = useRef<HTMLDivElement>(null);
   const trailRef = useRef<HTMLDivElement>(null);
+  const frameRef = useRef<HTMLDivElement>(null);
+  // In a lobby the court is the standard one, which the box may be wider or taller than.
+  const standard = game.lobby?.status === 'waiting' || game.lobby?.status === 'playing';
 
   useEffect(() => {
     const court = courtRef.current;
@@ -53,6 +56,7 @@ export const Court = ({ className, 'aria-label': ariaLabel = 'Pong court', autoF
       leftRipple: leftRippleRef.current,
       rightRipple: rightRippleRef.current,
       trail: trailRef.current,
+      frame: frameRef.current,
     });
   }, [store]);
 
@@ -63,11 +67,12 @@ export const Court = ({ className, 'aria-label': ariaLabel = 'Pong court', autoF
   return (
     <div
       ref={courtRef}
-      className={classNames('pong-court', className)}
+      className={classNames('pong-court', standard && 'pong-court-standard', className)}
       role='application'
       aria-label={ariaLabel}
       tabIndex={0}
     >
+      <div ref={frameRef} className='pong-frame' aria-hidden />
       <div ref={leftRippleRef} className='pong-ripple pong-ripple-left' aria-hidden />
       <div ref={rightRippleRef} className='pong-ripple pong-ripple-right' aria-hidden />
       <div ref={trailRef} className='pong-trail' aria-hidden>
@@ -85,7 +90,7 @@ export const Court = ({ className, 'aria-label': ariaLabel = 'Pong court', autoF
         className={classNames(
           'pong-paddle',
           'pong-paddle-left',
-          game.difficulty === 'impossible' && 'pong-paddle-pulsing',
+          game.difficulty === 'impossible' && !standard && 'pong-paddle-pulsing',
           atGamePoint(game, 'left') && 'pong-paddle-game-point',
         )}
         aria-hidden

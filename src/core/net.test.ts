@@ -128,7 +128,7 @@ describe('a match between two games', () => {
     // Player a served. With messages this slow, the ball reaches b's side of a's court before b's hit is heard of.
     run(3, () => a.simulation.state.awaiting);
     expect(a.simulation.state.awaiting).toBe(true);
-    expect(a.simulation.state.ball.x).toBe(-a.simulation.state.ballWidth);
+    expect(a.simulation.state.ball.x).toBe(0);
     expect(a.simulation.state.scores).toEqual({ left: 0, right: 0 });
     run(0.5, () => !a.simulation.state.awaiting);
     expect(a.simulation.state.ball.heading).toBe(1);
@@ -145,6 +145,9 @@ describe('a match between two games', () => {
     expect(a.simulation.state.scores.right).toBe(b.simulation.state.scores.left);
     expect(a.simulation.state.scorer).toBe('left');
     expect(b.simulation.state.scorer).toBe('right');
+    // The ball stopped in the same place for both: past a's paddle.
+    expect(mirrored(b.simulation)).toBeCloseTo(a.simulation.state.ball.x, 4);
+    expect(b.simulation.state.ball.y).toBeCloseTo(a.simulation.state.ball.y, 4);
   });
 
   it('plays a whole match to the same score and winner', () => {
@@ -222,19 +225,134 @@ describe('a game against a remote player', () => {
     expect(simulation.state.left.y).toBe((standardCourt.height - standardCourt.paddleHeight) / 2);
   });
 
-  it('carries a reported paddle forward by the age of the report', () => {
+  it('starts a match with both paddles in the middle, wherever they were left', () => {
     const simulation = court();
-    // Moving down for half a second already, as of a tenth of a second before the end of the step to come.
-    simulation.remotePaddle(100, 1, 0.5, 0.1);
+    const { left, right } = simulation.state;
+    const middle = (standardCourt.height - standardCourt.paddleHeight) / 2;
+    // The player moved before the match, and the other player's paddle was last shown elsewhere.
+    for (let step = 0; step < 30; step++) simulation.step(frame, 1);
+    simulation.remotePaddle(50, 0, 0, 1);
     simulation.step(frame, 0);
-    const { y } = simulation.state.left;
-    expect(y).toBeGreaterThan(100 + standardCourt.height * standardCourt.paddleSpeed * 0.1);
+    expect(right.y).not.toBe(middle);
+    expect(left.y).toBe(50);
+    simulation.toss(false, 'right');
+    expect(right.y).toBe(middle);
+    expect(left.y).toBe(middle);
+  });
+
+  it('shows a reported paddle a moment behind, as it was reported', () => {
+    const simulation = court();
+    const { left } = simulation.state;
+    const rest = left.y;
+    // They have just started down from 100.
+    simulation.remotePaddle(100, 1, 0, 0);
+    simulation.step(frame, 0);
+    expect(left.y).toBe(rest);
+    for (let step = 0; step < 4; step++) simulation.step(frame, 0);
+    expect(left.y).toBeGreaterThan(100);
+    expect(left.y).toBeLessThan(110);
+    // They stop at 200: the paddle here runs on to there, stops, and never passes it.
+    simulation.remotePaddle(200, 0, 0, 0);
+    let furthest = 0;
+    for (let step = 0; step < 10; step++) {
+      simulation.step(frame, 0);
+      furthest = Math.max(furthest, left.y);
+    }
+    expect(furthest).toBe(200);
+    expect(left.y).toBe(200);
+    expect(left.direction).toBe(0);
+  });
+
+  it('carries a report that arrives late forward by how late it is', () => {
+    const simulation = court();
+    const { left } = simulation.state;
+    // Moving down at full speed, as of a quarter of a second before the end of the step to come: later than the paddle is shown behind.
+    simulation.remotePaddle(100, 1, 1, 0.25);
+    simulation.step(frame, 0);
+    expect(left.y).toBeGreaterThan(100 + standardCourt.height * standardCourt.paddleSpeed * 0.1);
+    const { y } = left;
     // With nothing new reported, it carries on the way it was going.
     simulation.step(frame, 0);
-    expect(simulation.state.left.y).toBeGreaterThan(y);
-    simulation.remotePaddle(200, 0, 0, 0.1);
+    expect(left.y).toBeGreaterThan(y);
+  });
+
+  /** Win the toss, and step until the serve has left the other player's end, with their paddle kept on or off the ball. */
+  const toTheirEnd = (simulation: Simulation, covered: boolean) => {
+    const { state } = simulation;
+    simulation.toss(false, 'right');
+    let hits = 0;
+    for (let step = 0; step < 60 * 10; step++) {
+      if (state.phase === 'rally' && (state.ball.heading === 1 || state.awaiting)) break;
+      const on = state.ball.y + state.ballHeight / 2 - state.paddleHeight / 2;
+      const off = state.ball.y > state.height / 2 ? 0 : state.height - state.paddleHeight;
+      simulation.remotePaddle(covered ? on : off, 0, 0, 0);
+      const events = simulation.step(frame, 0);
+      if (state.phase === 'rally') hits += events.filter((event) => event === 'paddle').length;
+    }
+    return hits;
+  };
+
+  it('stops the ball at the face of their paddle until their word arrives', () => {
+    const simulation = court();
+    const { state } = simulation;
+    expect(toTheirEnd(simulation, true)).toBe(0);
+    expect(state.awaiting).toBe(true);
+    expect(state.ball.x).toBe(state.paddleWidth);
+    expect(state.ball.heading).toBe(-1);
+    const { y } = state.ball;
     simulation.step(frame, 0);
-    expect(simulation.state.left.y).toBe(200);
+    expect(state.ball.x).toBe(state.paddleWidth);
+    expect(state.ball.y).toBe(y);
+    // Their hit sends it back on the path they report.
+    simulation.remoteBall({ x: 100, y: 300, speed: state.ball.speed, heading: 1, angle: 0.2 }, 'hit', 310, 0);
+    expect(simulation.step(frame, 0)).toContain('paddle');
+    expect(state.awaiting).toBe(false);
+    expect(state.ball.x).toBe(100);
+    expect(state.ball.y).toBe(300);
+    expect(state.ball.angle).toBe(0.2);
+  });
+
+  it('moves a ball it had stopped at their paddle to where it lies when they missed it', () => {
+    const simulation = court();
+    const { state } = simulation;
+    toTheirEnd(simulation, true);
+    expect(state.awaiting).toBe(true);
+    // For them it went on past the paddle to the edge of the court.
+    simulation.remoteMiss(0, 400);
+    expect(simulation.step(frame, 0)).toContain('point');
+    expect(state.awaiting).toBe(false);
+    expect(state.ball.x).toBe(0);
+    expect(state.ball.y).toBe(400);
+    expect(state.scores).toEqual({ left: 0, right: 1 });
+  });
+
+  it('lets the ball past a paddle that looks to have missed, and waits for their word', () => {
+    const simulation = court();
+    const { state } = simulation;
+    expect(toTheirEnd(simulation, false)).toBe(0);
+    expect(state.awaiting).toBe(true);
+    expect(state.ball.x).toBe(0);
+    expect(state.scores).toEqual({ left: 0, right: 0 });
+    // They did reach it: their hit is news here.
+    simulation.remoteBall({ x: 100, y: 300, speed: 500, heading: 1, angle: 0 }, 'hit', 310, 0);
+    expect(simulation.step(frame, 0)).toContain('paddle');
+    expect(state.awaiting).toBe(false);
+  });
+
+  it('draws a reported paddle easing to where it is, not jumping', () => {
+    const simulation = court();
+    const { left } = simulation.state;
+    const shown = left.y;
+    // Late enough to be shown at once.
+    simulation.remotePaddle(shown + 60, 0, 0, 0.2);
+    simulation.step(frame, 0);
+    expect(left.y).toBe(shown + 60);
+    expect(left.y + left.offset).toBeCloseTo(shown, 6);
+    simulation.step(frame, 0);
+    expect(left.y + left.offset).toBeGreaterThan(shown);
+    expect(left.y + left.offset).toBeLessThan(shown + 60);
+    for (let step = 0; step < 30; step++) simulation.step(frame, 0);
+    expect(left.offset).toBe(0);
   });
 
   it('ignores reports when it is not playing a remote player', () => {
@@ -242,7 +360,7 @@ describe('a game against a remote player', () => {
     simulation.setRemote(false);
     const { y } = simulation.state.left;
     simulation.remotePaddle(10, 1, 0, 0);
-    simulation.remoteMiss();
+    simulation.remoteMiss(0, 0);
     simulation.step(frame, 0);
     expect(simulation.state.left.y).toBe(y);
     expect(simulation.state.scores).toEqual({ left: 0, right: 0 });

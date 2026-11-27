@@ -8,6 +8,7 @@ export const defaultKeys: PongKeys = {
   Escape: 'reset',
   '?': 'help',
   d: 'difficulty',
+  2: 'lobby',
 };
 
 export const defaultOptions: ResolvedPongOptions = {
@@ -21,6 +22,9 @@ export const defaultOptions: ResolvedPongOptions = {
   toss: true,
   keys: defaultKeys,
   paddleSpeed: 1.2,
+  server: null,
+  lobbyLink: null,
+  lobbyCode: null,
 };
 
 /** The start screen: what a court shows before its engine exists, and after a reset. */
@@ -36,9 +40,10 @@ export const initialState: PongState = {
   winningScore: defaultOptions.winningScore,
   help: false,
   keys: defaultKeys,
+  lobby: null,
 };
 
-const actions: readonly PongAction[] = ['up', 'down', 'serve', 'pause', 'reset', 'help', 'difficulty'];
+const actions: readonly PongAction[] = ['up', 'down', 'serve', 'pause', 'reset', 'help', 'difficulty', 'lobby'];
 /** Every difficulty, in the order the difficulty key steps through them. */
 export const difficulties: readonly PongDifficulty[] = ['easy', 'normal', 'hard', 'impossible'];
 
@@ -70,5 +75,8 @@ export const resolveOptions = (options: PongOptions): ResolvedPongOptions => {
     toss: merged.toss === true,
     keys: resolveKeys(merged.keys),
     paddleSpeed: Math.max(0, finiteOr(merged.paddleSpeed, defaultOptions.paddleSpeed)),
+    server: typeof merged.server === 'string' && merged.server !== '' ? merged.server : null,
+    lobbyLink: typeof merged.lobbyLink === 'function' ? merged.lobbyLink : null,
+    lobbyCode: typeof merged.lobbyCode === 'string' && merged.lobbyCode !== '' ? merged.lobbyCode : null,
   };
 };
