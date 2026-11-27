@@ -100,7 +100,9 @@ export type PongLobby = {
   ready: boolean;
   /** The other player, or `null` while there isn't one. */
   opponent: { ready: boolean; connected: boolean } | null;
-  /** Points needed to win a match in this lobby, set by whoever created it. */
+  /** This player is the lobby's host: its creator, or whoever was left when the host went. */
+  host: boolean;
+  /** Points needed to win a match in this lobby: its host's `winningScore`, which the host can change between matches. */
   winningScore: number;
   /** While a match is paused: whose pause it is, and why. Only that player can end it. */
   pause: { by: 'you' | 'opponent'; reason: PauseReason } | null;

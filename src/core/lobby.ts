@@ -48,6 +48,8 @@ export type LobbyClient = {
   create: (winningScore: number) => void;
   join: (code: string) => void;
   ready: (ready: boolean) => void;
+  /** As the lobby's host, between matches: set the points the next match is played to. */
+  winningScore: (winningScore: number) => void;
   pause: (reason: 'manual' | 'away') => void;
   resume: () => void;
   /** Send the other player's game a message, stamped with the server's time it describes. */
@@ -234,6 +236,7 @@ export const createLobbyClient = (server: string, view: LobbyView, handlers: Lob
     create: (winningScore) => begin('new', { type: 'hello', version: protocolVersion, winningScore }),
     join: (code) => begin(encodeURIComponent(code.trim()), { type: 'hello', version: protocolVersion }),
     ready: (ready) => send({ type: 'ready', ready }),
+    winningScore: (winningScore) => send({ type: 'winningScore', winningScore }),
     pause: (reason) => send({ type: 'pause', reason }),
     resume: () => send({ type: 'resume' }),
     game: (message, time) => send({ type: 'game', time, message }),

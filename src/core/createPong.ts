@@ -193,6 +193,7 @@ export const createPong = (elements: PongElements, initialOptions: PongOptions =
       notice,
       ready: lobby?.ready === true,
       opponent: lobby?.opponent ?? null,
+      host: lobby?.host === true,
       winningScore: lobby?.winningScore ?? options.winningScore,
       pause: lobby?.pause ?? null,
     };
@@ -576,10 +577,18 @@ export const createPong = (elements: PongElements, initialOptions: PongOptions =
     measure();
   };
 
+  /** A lobby is played to its host's winning score, which the server takes between matches. */
+  const offerWinningScore = () => {
+    const lobby = client?.state.lobby;
+    if (lobby == null || !lobby.host || lobby.phase !== 'lobby' || lobby.winningScore === options.winningScore) return;
+    client?.winningScore(options.winningScore);
+  };
+
   /** The connection's state changed: follow it. */
   const onLobbyChange = () => {
     if (client == null) return;
     const { status, lobby } = client.state;
+    offerWinningScore();
     if (twoPlayer && (status === 'idle' || lobby == null)) {
       leaveTwoPlayer();
       publish(lobbyOpen ? null : 'start');
@@ -756,6 +765,7 @@ export const createPong = (elements: PongElements, initialOptions: PongOptions =
       connectLobby();
       if (wasTwoPlayer) leaveTwoPlayer();
     }
+    offerWinningScore();
     applyOptions();
     // Attract mode starts and stops with its option: a rally it ended has left the court.
     if (wasAttracting !== (simulation.state.phase === 'start' && attracting())) {

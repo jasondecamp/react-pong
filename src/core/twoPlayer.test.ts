@@ -153,6 +153,24 @@ describe('a lobby', () => {
     expect(pong.getState().lobby?.link).toBe(`https://example.com/join/${pong.getState().lobby?.code}`);
   });
 
+  it('is played to its host\'s winning score, which the host can change between matches', async () => {
+    const a = player({ winningScore: 5 });
+    const b = player({ winningScore: 21 });
+    a.pong.createLobby();
+    await server.settle();
+    b.pong.joinLobby(a.pong.getState().lobby?.code ?? '');
+    await server.settle();
+    expect(a.pong.getState().lobby).toMatchObject({ host: true, winningScore: 5 });
+    expect(b.pong.getState().lobby).toMatchObject({ host: false, winningScore: 5 });
+    b.pong.update({ winningScore: 3 });
+    await server.settle();
+    expect(a.pong.getState().lobby?.winningScore).toBe(5);
+    a.pong.update({ winningScore: 7 });
+    await server.settle();
+    expect(a.pong.getState().lobby?.winningScore).toBe(7);
+    expect(b.pong.getState().lobby?.winningScore).toBe(7);
+  });
+
   it('is joined by its code, however it is typed, and each player hears of the other', async () => {
     const a = player({ winningScore: 5 });
     const b = player({ winningScore: 21 });

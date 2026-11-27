@@ -9,7 +9,7 @@ import type { NetMessage } from './messages.js';
  * server would get wrong. The two exchange it on connecting, and a mismatch
  * is refused with the `version` error rather than left to fail strangely.
  */
-export const protocolVersion = 1;
+export const protocolVersion = 2;
 
 /** Why the server refused or dropped a connection. */
 export type LobbyError =
@@ -36,13 +36,15 @@ export type LobbyNotice =
 
 export type ClientMessage =
   /**
-   * The first message. `winningScore` is the creator's, and sets the lobby's.
+   * The first message. `winningScore` is the creator's, and sets the lobby's to begin with.
    * `seat` is the key a game was given when it first joined: sending it back
    * reclaims its place after a dropped connection.
    */
   | { type: 'hello'; version: number; winningScore?: number; seat?: string }
   /** In the lobby: this player is ready for a match, or no longer is. */
   | { type: 'ready'; ready: boolean }
+  /** In the lobby, from its host: the points the next match is played to. */
+  | { type: 'winningScore'; winningScore: number }
   /** During a match: something for the other player's game. `time` is on the server's clock, as this game estimates it. */
   | { type: 'game'; time: number; message: NetMessage }
   | { type: 'pause'; reason: 'manual' | 'away' }
@@ -57,6 +59,8 @@ export type ClientMessage =
 export type LobbyState = {
   code: string;
   winningScore: number;
+  /** This player is the lobby's host, who sets its winning score between matches: its creator, or whoever was left when the host went. */
+  host: boolean;
   phase: 'lobby' | 'playing' | 'paused';
   /** This player is ready. Only means anything in the lobby. */
   ready: boolean;

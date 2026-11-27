@@ -1,5 +1,5 @@
 import classNames from 'classnames';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Pong } from 'react-pong';
 import type { PongKeys, PongOptions, PongTheme } from 'react-pong';
 import { defaultKeys, defaultOptions } from 'react-pong/core';
@@ -65,7 +65,19 @@ export const App = () => {
   const [panelOpen, setPanelOpen] = useState(false);
   // The winning score of the two-player lobby the game is in, or `null` when it is in none.
   const [lobbyScore, setLobbyScore] = useState<number | null>(null);
+  // Whether that score is this player's to change: only the lobby's host's, between matches.
+  const [hosting, setHosting] = useState(false);
   const inLobby = lobbyScore != null;
+  const watchLobby = useCallback((winningScore: number | null, editable: boolean) => {
+    setLobbyScore(winningScore);
+    setHosting(editable);
+  }, []);
+  let rulesNote = 'In two player: shared by both players. The lobby\'s host sets them, and can change them between matches.';
+  if (inLobby) {
+    rulesNote = hosting
+      ? 'Shared by both players. You host this lobby, so you can change them until the match starts.'
+      : 'Shared by both players. Only the lobby\'s host can change them, between matches.';
+  }
   const standardNote = inLobby ? 'The standard court\'s in two player.' : undefined;
   const systemDark = useSystemDark();
   const declarations = themeDeclarations(theme);
@@ -97,7 +109,7 @@ export const App = () => {
           <Pong.Message />
           <Pong.Help />
           <Pong.Lobby />
-          <LobbyWatch onChange={setLobbyScore} />
+          <LobbyWatch onChange={watchLobby} />
         </Pong>
         {!panelOpen && (
           <button type='button' className={classNames(styles.button, styles.show)} onClick={() => setPanelOpen(true)}>
@@ -123,7 +135,7 @@ export const App = () => {
                 : 'Press 2 for two player. Each group below says how it applies there.'}
             </p>
           )}
-          <Controls values={inLobby ? { ...options, winningScore: lobbyScore } : options} onChange={setOption}>
+          <Controls values={inLobby && !hosting ? { ...options, winningScore: lobbyScore } : options} onChange={setOption}>
             <Controls.Group title='Appearance'>
               <Controls.Choice name='theme' label='Light or dark'>
                 <Controls.ChoiceOption value='system' label='System' />
@@ -133,10 +145,8 @@ export const App = () => {
             </Controls.Group>
             <Controls.Group
               title='Match rules'
-              note={inLobby
-                ? 'Shared by both players. Set when this lobby was created, and fixed until you leave it.'
-                : 'In two player: shared by both players. Whoever creates the lobby sets them, and they are fixed from then on.'}
-              disabled={inLobby}
+              note={rulesNote}
+              disabled={inLobby && !hosting}
             >
               <Controls.Slider name='winningScore' label='Winning score' min={1} max={21} />
             </Controls.Group>
