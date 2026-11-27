@@ -95,7 +95,11 @@ export const createPong = (elements: PongElements, initialOptions: PongOptions =
   // What the other player's game has sent since the last step.
   const inbound: { message: NetMessage; time: number }[] = [];
   // Where the standard court sits in the box, and how much it is scaled to fit. Single-player is the box itself.
-  const layout = { scale: 1, x: 0, y: 0 };
+  // `right` is the bar on the right, which may differ from `x`, the bar on the
+  // left, by a device pixel. `pixel` is how many device pixels a px is.
+  const layout = { scale: 1, x: 0, y: 0, right: 0, pixel: 1 };
+  /** To the nearest device pixel, so that pieces drawn side by side meet exactly. */
+  const snap = (value: number) => Math.round(value * layout.pixel) / layout.pixel;
   // A code this game was handed to join with, by the page's address.
   let addressCode: string | null = null;
   try {
@@ -262,15 +266,27 @@ export const createPong = (elements: PongElements, initialOptions: PongOptions =
     trailShown = false;
   };
 
+  /**
+   * Where a ball's color element goes for a ball `offset` px from the court's
+   * left edge: stretched from the ball's width to the court's and slid
+   * opposite the ball. It runs a ball's width past the court at each end,
+   * because the edge of something magnified this much is soft, and at the
+   * court's edge it would otherwise show inside the ball.
+   */
+  const colorTransform = (offset: number) => {
+    const { width, ballWidth } = simulation.state;
+    return `translateX(${round(-offset - ballWidth * layout.scale)}px) scaleX(${round(width / ballWidth + 2)})`;
+  };
+
   /** Leave the next ghost at a spot on the court, colored for it, and start its fade. */
   const leaveGhost = (x: number, y: number) => {
-    const { width, ballWidth } = simulation.state;
+    const { ballWidth } = simulation.state;
     const ghost = ghosts[trailNext];
     const color = ghostColors[trailNext];
     if (ghost == null) return;
     ghost.style.transform = `translate(${round(layout.x + x * layout.scale)}px, ${round(layout.y + y * layout.scale)}px)`;
     if (color != null && ballWidth > 0) {
-      color.style.transform = `translateX(${round(-x * layout.scale)}px) scaleX(${round(width / ballWidth)})`;
+      color.style.transform = colorTransform(x * layout.scale);
     }
     ghost.classList.remove(trailAgain ? trailClass : trailAgainClass);
     ghost.classList.add(trailAgain ? trailAgainClass : trailClass);
@@ -308,17 +324,20 @@ export const createPong = (elements: PongElements, initialOptions: PongOptions =
   };
 
   const render = () => {
-    const { ball: ballState, left, right, width, ballWidth } = simulation.state;
+    const { ball: ballState, left, right, ballWidth } = simulation.state;
     const { scale, x, y } = layout;
-    ball.style.transform = `translate(${round(x + ballState.x * scale)}px, ${round(y + ballState.y * scale)}px)`;
+    // In a match everything sits on whole device pixels: a ball beside or behind a paddle then lines up with it.
+    const ballX = twoPlayer ? snap(x + ballState.x * scale) : round(ballState.x);
+    const ballY = twoPlayer ? snap(y + ballState.y * scale) : round(ballState.y);
+    ball.style.transform = `translate(${ballX}px, ${ballY}px)`;
     // The ball is a window onto its color element, which spans the court and stays put while the ball moves.
     if (ballColor != null && ballWidth > 0) {
-      ballColor.style.transform = `translateX(${round(-ballState.x * scale)}px) scaleX(${round(width / ballWidth)})`;
+      ballColor.style.transform = colorTransform(ballX - x);
     }
     if (twoPlayer) {
       // The standard court sits inside the box, so its paddles come in from the box's edges to the court's.
-      leftPaddle.style.transform = `translate(${round(x)}px, ${round(y + (left.y + left.offset) * scale - leftRest)}px)`;
-      rightPaddle.style.transform = `translate(${round(-x)}px, ${round(y + right.y * scale - rightRest)}px)`;
+      leftPaddle.style.transform = `translate(${round(x)}px, ${snap(y + (left.y + left.offset) * scale - leftRest)}px)`;
+      rightPaddle.style.transform = `translate(${round(-layout.right)}px, ${snap(y + right.y * scale - rightRest)}px)`;
     } else {
       leftPaddle.style.transform = `translateY(${round(left.y + left.offset - leftRest)}px)`;
       rightPaddle.style.transform = `translateY(${round(right.y - rightRest)}px)`;
@@ -887,15 +906,24 @@ export const createPong = (elements: PongElements, initialOptions: PongOptions =
     if (twoPlayer) {
       // The standard court, as large as fits in the box and centered in it.
       const { width, height, ballSize, paddleWidth, paddleHeight } = standardCourt;
-      layout.scale = Math.min(court.clientWidth / width, court.clientHeight / height);
-      layout.x = (court.clientWidth - width * layout.scale) / 2;
-      layout.y = (court.clientHeight - height * layout.scale) / 2;
+      const fit = Math.min(court.clientWidth / width, court.clientHeight / height);
+      // The largest court that fits whose ball is a whole number of device
+      // pixels wide. The paddles are as wide as the ball and the court a
+      // whole number of balls across, so every edge then falls on a pixel.
+      layout.pixel = view?.devicePixelRatio || 1;
+      const ballPixels = Math.floor(fit * ballSize * layout.pixel);
+      layout.scale = ballPixels >= 1 ? ballPixels / (ballSize * layout.pixel) : fit;
+      layout.x = snap((court.clientWidth - width * layout.scale) / 2);
+      layout.y = snap((court.clientHeight - height * layout.scale) / 2);
+      layout.right = court.clientWidth - layout.x - width * layout.scale;
       simulation.setBounds(width, height, ballSize, ballSize, paddleWidth, paddleHeight);
       sizePieces();
     } else {
       layout.scale = 1;
       layout.x = 0;
       layout.y = 0;
+      layout.right = 0;
+      layout.pixel = 1;
       sizePieces();
       simulation.setBounds(
         court.clientWidth,

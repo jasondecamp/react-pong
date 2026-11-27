@@ -226,19 +226,32 @@ describe('a two-player match', () => {
 
   it('is played on the standard court, scaled to fit the box and centered in it', async () => {
     const { a } = await match();
-    // An 800 by 400 box holds the 1200 by 675 court at 400 / 675 of its size, with bars at the sides.
-    const scale = 400 / 675;
+    // An 800 by 400 box would hold the 1200 by 675 court at 400 / 675 of its size, with a ball 8.9px wide. The
+    // court is the largest whose ball is a whole number of pixels: 8, which makes it 640 by 360, with bars all round.
     const { ball, leftPaddle, rightPaddle, frame } = a.elements;
-    expect(parseFloat(ball.style.width)).toBeCloseTo(15 * scale, 1);
-    expect(parseFloat(ball.style.height)).toBeCloseTo(15 * scale, 1);
-    expect(parseFloat(leftPaddle.style.height)).toBeCloseTo(101.25 * scale, 1);
-    expect(parseFloat(rightPaddle.style.width)).toBeCloseTo(15 * scale, 1);
-    expect(parseFloat(frame.style.width)).toBeCloseTo(1200 * scale, 1);
-    expect(frame.style.height).toBe('400px');
-    const bar = (800 - 1200 * scale) / 2;
-    expect(frame.style.transform).toBe(`translate(${Math.round(bar * 100) / 100}px, 0px)`);
-    expect(leftPaddle.style.transform).toMatch(new RegExp(`^translate\\(${Math.round(bar * 100) / 100}px, `));
-    expect(rightPaddle.style.transform).toMatch(new RegExp(`^translate\\(-${Math.round(bar * 100) / 100}px, `));
+    expect(ball.style.width).toBe('8px');
+    expect(ball.style.height).toBe('8px');
+    expect(leftPaddle.style.width).toBe('8px');
+    expect(rightPaddle.style.width).toBe('8px');
+    expect(leftPaddle.style.height).toBe('54px');
+    expect(frame.style.width).toBe('640px');
+    expect(frame.style.height).toBe('360px');
+    expect(frame.style.transform).toBe('translate(80px, 20px)');
+    expect(leftPaddle.style.transform).toMatch(/^translate\(80px, /);
+    expect(rightPaddle.style.transform).toMatch(/^translate\(-80px, /);
+  });
+
+  it('draws the ball and the paddles on whole pixels, so that they line up', async () => {
+    const { a } = await match();
+    await run(400, () => a.pong.getState().phase === 'rally');
+    for (let step = 0; step < 30; step++) {
+      await run(1);
+      for (const piece of [a.elements.ball, a.elements.leftPaddle, a.elements.rightPaddle]) {
+        const [, x, y] = /translate\((-?[\d.]+)px, (-?[\d.]+)px\)/.exec(piece.style.transform) ?? [];
+        expect(Number.isInteger(Number(x))).toBe(true);
+        expect(Number.isInteger(Number(y))).toBe(true);
+      }
+    }
   });
 
   it('shows each player the same rally, with themselves on the right', async () => {

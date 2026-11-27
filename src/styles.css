@@ -158,6 +158,12 @@
   will-change: transform;
 }
 
+/* The ball is drawn over the paddles: one that has got past a paddle lies in
+   its column, and stays whole when the paddle moves across it. */
+.pong-court > .pong-ball {
+  z-index: 1;
+}
+
 /* The ball's trail: ghosts of the ball. At a steady interval the engine leaves
    one where the ball is and gives it a fade class; it stays put and fades
    out. The two classes do the same, under two names, because swapping one
@@ -195,8 +201,9 @@
 }
 
 /* The ball is a window onto this gradient: the engine stretches it from the
-   ball's width to the court's and slides it opposite the ball, so it stays
-   put on the court while the ball moves across it. */
+   ball's width to the court's, and a ball's width more at each end, and
+   slides it opposite the ball, so it stays put on the court while the ball
+   moves across it. */
 .pong-ball-color {
   width: 100%;
   height: 100%;

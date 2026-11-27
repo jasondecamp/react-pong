@@ -750,8 +750,8 @@ describe('createPong', () => {
       for (let frame = 0; frame < 10; frame++) browser.frame();
       expect(pong.getState().phase).toBe('rally');
       const x = Number(/translate\((-?[\d.]+)px/.exec(elements.ball.style.transform)?.[1]);
-      // An 800px court is 53.33 times the width of a 15px ball.
-      expect(ballColor.style.transform).toBe(`translateX(${-x}px) scaleX(53.33)`);
+      // An 800px court is 53.33 times the width of a 15px ball, and the element runs a ball's width past each end.
+      expect(ballColor.style.transform).toBe(`translateX(${Math.round((-x - 15) * 100) / 100}px) scaleX(55.33)`);
     });
 
     it('is handed back on destroy', () => {
@@ -811,7 +811,7 @@ describe('createPong', () => {
       expect(ghosts.filter(fading)).toHaveLength(2);
       expect(first).toHaveClass('pong-trail-fade');
       const color = first.firstElementChild as HTMLElement;
-      expect(color.style.transform).toBe(`translateX(${-xOf(first)}px) scaleX(53.33)`);
+      expect(color.style.transform).toBe(`translateX(${Math.round((-xOf(first) - 15) * 100) / 100}px) scaleX(55.33)`);
     });
 
     it('leaves each ghost where it is while the ball moves on, evenly spaced', () => {

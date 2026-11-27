@@ -263,7 +263,7 @@ It needs a server, which this repository contains (`server/`, a Cloudflare Worke
 ```
 
 - Both players see themselves on the right.
-- A match is played on one standard court, 16 by 9, scaled to fit each player's box, so both see exactly the same game whatever the shape of their page. The ball's and paddles' sizes and the paddle speed are the standard court's; colors, fonts, the palette, sound, ripples, the trail, and keys stay each player's own.
+- A match is played on one standard court, 16 by 9, scaled to fit each player's box, so both see exactly the same game whatever the shape of their page. It is the largest court that fits with a ball a whole number of screen pixels wide, so the ball and paddles line up exactly; the box around it shows as tinted bars. The ball's and paddles' sizes and the paddle speed are the standard court's; colors, fonts, the palette, sound, ripples, the trail, and keys stay each player's own.
 - It is played to the lobby creator's `winningScore`. There is no AI, so no difficulty and no smack talk.
 - After the toss, each point is served by whoever scored the last one, with the serve key.
 - Space pauses for both players, and only the player who paused can resume, after a 3-2-1 countdown. Losing focus, hiding the tab, or opening the help pauses too. A dropped connection has 30 seconds to come back by itself before the match is abandoned.
